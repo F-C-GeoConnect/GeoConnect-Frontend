@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geo_connect/login_screen2.dart';
 
 import 'login_screen.dart';
 
@@ -17,7 +18,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.purple,
         useMaterial3: true,
       ),
-      home: const LoginScreen(),
+      home: const LoginScreen2(),
       debugShowCheckedModeBanner: false,
     );
   }

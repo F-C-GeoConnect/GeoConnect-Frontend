@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:geo_connect/login_screen2.dart';
+import 'package:geo_connect/screens/splash_screen.dart';
 
-import 'login_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -9,7 +8,6 @@ void main() {
 
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -18,7 +16,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.purple,
         useMaterial3: true,
       ),
-      home: const LoginScreen2(),
+      home: const SplashScreen(),
       debugShowCheckedModeBanner: false,
     );
   }

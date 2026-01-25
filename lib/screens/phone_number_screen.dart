@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'otp_verification_screen.dart';
 
-import 'package:flutter/material.dart';
-
 class PhoneNumberScreen extends StatefulWidget {
-  const PhoneNumberScreen({Key? key}) : super(key: key);
+  const PhoneNumberScreen({super.key});
 
   @override
   State<PhoneNumberScreen> createState() => _PhoneNumberScreenState();
@@ -15,7 +13,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
 
   void _onNumberTap(String number) {
     setState(() {
-      if (_phoneNumber.length < 15) { // Limit phone number length
+      if (_phoneNumber.length < 15) {
         _phoneNumber += number;
       }
     });
@@ -34,7 +32,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => OtpVerificationScreen(phoneNumber: _phoneNumber),
+          builder: (_) => OTPVerificationScreen(phoneNumber: _phoneNumber),
         ),
       );
     }
@@ -59,13 +57,11 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Back button and header
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Back button
                     GestureDetector(
                       onTap: () => Navigator.pop(context),
                       child: Container(
@@ -80,8 +76,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                       ),
                     ),
                     const SizedBox(height: 40),
-
-                    // Title
                     const Text(
                       'Enter your mobile number',
                       style: TextStyle(
@@ -90,8 +84,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                       ),
                     ),
                     const SizedBox(height: 40),
-
-                    // Mobile Number label
                     Text(
                       'Mobile Number',
                       style: TextStyle(
@@ -101,8 +93,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                       ),
                     ),
                     const SizedBox(height: 15),
-
-                    // Phone number display with cursor
                     SizedBox(
                       height: 30,
                       child: Row(
@@ -115,7 +105,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                               letterSpacing: 2,
                             ),
                           ),
-                          // Blinking cursor
                           if (_phoneNumber.isNotEmpty)
                             Container(
                               width: 2,
@@ -127,7 +116,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // Underline
                     Container(
                       height: 1,
                       color: Colors.grey.shade300,
@@ -135,10 +123,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                   ],
                 ),
               ),
-
               const Spacer(),
-
-              // Next button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Align(
@@ -153,7 +138,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF66BB6A).withOpacity(0.3),
+                            color: const Color(0xFF66BB6A).withValues(alpha: 0.3),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -167,10 +152,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 30),
-
-              // Number pad
+              ),const SizedBox(height: 30),
               _buildNumberPad(),
               const SizedBox(height: 30),
             ],
@@ -185,7 +167,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         children: [
-          // Row 1: 1, 2, 3
           Row(
             children: [
               _buildNumberKey('1', ''),
@@ -196,8 +177,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
             ],
           ),
           const SizedBox(height: 12),
-
-          // Row 2: 4, 5, 6
           Row(
             children: [
               _buildNumberKey('4', 'GHI'),
@@ -208,8 +187,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
             ],
           ),
           const SizedBox(height: 12),
-
-          // Row 3: 7, 8, 9
           Row(
             children: [
               _buildNumberKey('7', 'PQRS'),
@@ -220,8 +197,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
             ],
           ),
           const SizedBox(height: 12),
-
-          // Row 4: +*#, 0, backspace
           Row(
             children: [
               _buildSpecialKey('+*#'),
@@ -247,7 +222,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -286,9 +261,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
   Widget _buildSpecialKey(String text) {
     return Expanded(
       child: GestureDetector(
-        onTap: () {
-          // Handle special characters if needed
-        },
+        onTap: () {},
         child: Container(
           height: 60,
           decoration: BoxDecoration(

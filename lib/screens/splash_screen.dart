@@ -14,11 +14,11 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     // Navigate to next screen after 3 seconds
-    Future.delayed(const Duration(seconds: 4), () {
-       Navigator.pushReplacement(
-         context,
-         MaterialPageRoute(builder: (context) => SignUpScreen()),
-       );
+    Future.delayed(const Duration(seconds: 3), () {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => SignUpScreen()),
+      );
     });
   }
 

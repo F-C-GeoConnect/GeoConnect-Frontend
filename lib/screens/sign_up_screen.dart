@@ -88,13 +88,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   const SizedBox(height: 40),
 
                   // Full Name Field
-                  Text(
-                    'Full Name',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[700],
-                      fontWeight: FontWeight.w500,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Full Name',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        '*',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.red,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
@@ -120,7 +132,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Email Field (Optional)
+                  // Email Field (Required)
                   Row(
                     children: [
                       Text(
@@ -132,12 +144,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Text(
-                        '(Optional)',
+                      const Text(
+                        '*',
                         style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
-                          fontStyle: FontStyle.italic,
+                          fontSize: 14,
+                          color: Colors.red,
                         ),
                       ),
                     ],
@@ -159,12 +170,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                     ),
                     validator: (value) {
-                      if (value != null && value.isNotEmpty) {
-                        // Only validate if email is provided
-                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                            .hasMatch(value)) {
-                          return 'Please enter a valid email';
-                        }
+                      if (value == null || value.isEmpty) {
+                        return 'Email is required';
+                      }
+                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                          .hasMatch(value)) {
+                        return 'Please enter a valid email';
                       }
                       return null;
                     },
@@ -251,7 +262,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             if (value == null || value.isEmpty) {
                               return 'Phone number is required';
                             }
-                            if (value.length < 10) {
+                            if (value.length < 10 || value.length > 10) {
                               return 'Enter valid phone number';
                             }
                             return null;
@@ -263,13 +274,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   const SizedBox(height: 24),
 
                   // Password Field
-                  Text(
-                    'Password',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[700],
-                      fontWeight: FontWeight.w500,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Password',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        '*',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.red,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
@@ -311,28 +334,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     },
                   ),
                   const SizedBox(height: 24),
-
-                  // Login Link
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Already have an account? ',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
-                        },
-                        child: const Text('Login',
-                            style: TextStyle(color: Color(0xFF00A651))),
-                      )],
-                  ),
-                  const SizedBox(height: 24),
-
                   // Continue Button
                   SizedBox(
                     width: double.infinity,
@@ -357,25 +358,59 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  // Divider
+                  Row(
+                    children: const [
+                      Expanded(child: Divider(thickness: 1)),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Text('Or', style: TextStyle(color: Colors.grey)),
+                      ),
+                      Expanded(child: Divider(thickness: 1)),
+                    ],
+                  ),
 
-                  // Use Phone Number Link
-                  Center(
-                    child: TextButton(
-                      onPressed: () {
-                        // Already using phone number by default
+                  const SizedBox(height: 15),
 
-                        // This could toggle to email-only signup if needed
-                      },
-                      child: const Text(
-                        'Use Phone number?',
+                  // Login Link
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Already have an account? ',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Color(0xFF00A651),
-                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[600],
                         ),
                       ),
-                    ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                        },
+                        child: const Text('Login',
+                            style: TextStyle(color: Color(0xFF00A651))),
+                      )],
                   ),
+                  const SizedBox(height: 24),
+
+                  // Use Phone Number Link
+                  // Center(
+                  //   child: TextButton(
+                  //     onPressed: () {
+                  //       // Already using phone number by default
+                  //
+                  //       // This could toggle to email-only signup if needed
+                  //     },
+                  //     child: const Text(
+                  //       'Use Phone number?',
+                  //       style: TextStyle(
+                  //         fontSize: 14,
+                  //         color: Color(0xFF00A651),
+                  //         fontWeight: FontWeight.w600,
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                   const SizedBox(height: 40),
                 ],
               ),

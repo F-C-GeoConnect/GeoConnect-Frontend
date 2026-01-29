@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geo_connect/screens/main_screen/main_screen.dart';
 import 'package:geo_connect/screens/sign_up_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -7,7 +8,9 @@ class LoginScreen extends StatefulWidget {
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
+
 class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
@@ -21,13 +24,16 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+
   void _showForgotPasswordDialog() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Reset Password'),
-          content: const Text('Enter your email to receive password reset instructions.'),
+          content: const Text(
+            'Enter your email to receive password reset instructions.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -37,7 +43,9 @@ class _LoginScreenState extends State<LoginScreen> {
               onPressed: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Password reset link sent to your email.')),
+                  const SnackBar(
+                    content: Text('Password reset link sent to your email.'),
+                  ),
                 );
               },
               child: const Text('Send'),
@@ -47,16 +55,20 @@ class _LoginScreenState extends State<LoginScreen> {
       },
     );
   }
-
   void _validateAndLogin() {
     setState(() {
       _emailError = _emailController.text.isEmpty ? 'Email is required' : null;
-      _passwordError = _passwordController.text.isEmpty ? 'Password is required' : null;
+      _passwordError = _passwordController.text.isEmpty
+          ? 'Password is required'
+          : null;
     });
 
     if (_emailError == null && _passwordError == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login functionality to be implemented')),
+      // Navigate to home page/main screen
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const MainScreen()),
+            (route) => false,  // This removes all previous routes
       );
     }
   }
@@ -90,7 +102,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 labelText: 'Email',
                 hintText: 'Enter your email',
                 border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 prefixIcon: const Icon(Icons.email_outlined),
                 errorText: _emailError,
                 errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
@@ -103,23 +116,30 @@ class _LoginScreenState extends State<LoginScreen> {
               decoration: InputDecoration(
                 labelText: 'Password',
                 hintText: 'Enter your password',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 prefixIcon: const Icon(Icons.lock_outlined),
                 suffixIcon: IconButton(
-                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
                 ),
                 errorText: _passwordError,
                 errorStyle: const TextStyle(color: Colors.red, fontSize: 12),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Align(
-              alignment: Alignment.center,
+              alignment: Alignment.centerLeft,
               child: TextButton(
                 onPressed: _showForgotPasswordDialog,
-                child: const Text('Forgot your password?',
-                    style: TextStyle(color: Color(0xFF00A651))),
+                child: const Text(
+                  'Forgot your password?',
+                  style: TextStyle(color: Color(0xFF00A651)),
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -128,22 +148,49 @@ class _LoginScreenState extends State<LoginScreen> {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 backgroundColor: Color(0xFF00A651),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
-              child: const Text('Login', style: TextStyle(fontSize: 16, color: Colors.white)),
+              child: const Text(
+                'Login',
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
             ),
-            const SizedBox(height: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            const SizedBox(height: 30),
+            // Divider
+            Row(
+              children: const [
+                Expanded(child: Divider(thickness: 1)),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('Or', style: TextStyle(color: Colors.grey)),
+                ),
+                Expanded(child: Divider(thickness: 1)),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text("Don't have an account? ",
-                    style: TextStyle(color: Colors.grey)),
+                const Text(
+                  "Don't have an account? ",
+                  style: TextStyle(color: Colors.grey),
+                ),
                 TextButton(
                   onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const SignUpScreen()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SignUpScreen(),
+                      ),
+                    );
                   },
-                  child: const Text('Sign Up',
-                      style: TextStyle(color: Color(0xFF00A651))),
+                  child: const Text(
+                    'Sign Up',
+                    style: TextStyle(color: Color(0xFF00A651)),
+                  ),
                 ),
               ],
             ),

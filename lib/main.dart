@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:geo_connect/screens/main_screen/home_screen.dart';
+import 'package:geo_connect/screens/main_screen/listings_screen.dart';
+import 'package:geo_connect/screens/main_screen/map_screen.dart';
+import 'package:geo_connect/screens/profile_page.dart';
 import 'package:geo_connect/screens/splash_screen.dart';
 
 
@@ -17,7 +21,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.green,
       ),
-      home: const SplashScreen(),
+      home: const FarmerMapScreen(),
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart'; // For LatLng coordinates
@@ -17,6 +19,7 @@ class _CommonMapScreenState extends State<CommonMapScreen> {
   // Map Controller to move the camera programmatically
   final MapController _mapController = MapController();
   final supabase = Supabase.instance.client;
+  late StreamSubscription? _realtimeSubscription;
 
   // Default Location: Kathmandu (Used until GPS loads)
   LatLng _myLocation = const LatLng(27.7172, 85.3240);
@@ -108,13 +111,22 @@ class _CommonMapScreenState extends State<CommonMapScreen> {
       _updateMarkers(data);
 
     } catch (e) {
-      print("Database Error: $e"); // Silent fail for UI, but log it
+      print("Database Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to load produce: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
   /// Listens for ANY new row inserted into 'farmer_posts'
   void _setupRealtimeListener() {
-    supabase
+    _realtimeSubscription = supabase
         .from('farmer_posts')
         .stream(primaryKey: ['id'])
         .listen((List<Map<String, dynamic>> rawData) {
@@ -354,5 +366,11 @@ class _CommonMapScreenState extends State<CommonMapScreen> {
 
   void _showSnack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.cancel();
+    super.dispose();
   }
 }

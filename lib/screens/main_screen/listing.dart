@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -13,6 +15,7 @@ class ListingPage extends StatefulWidget {
 class _ListingPageState extends State<ListingPage> {
   final _supabase = Supabase.instance.client;
   late final Stream<List<Map<String, dynamic>>> _productsStream;
+  late StreamSubscription? _productsSubscription;
 
   @override
   void initState() {
@@ -23,6 +26,14 @@ class _ListingPageState extends State<ListingPage> {
         .stream(primaryKey: ['id'])
         .eq('sellerID', currentUser?.id ?? '')
         .order('created_at', ascending: false);
+
+    _productsSubscription = _productsStream.listen((_) {});
+  }
+
+  @override
+  void dispose() {
+    _productsSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _updateQuantity(int productId, int currentQuantity, int change) async {

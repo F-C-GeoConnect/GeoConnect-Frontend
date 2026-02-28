@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../login_screen.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -14,14 +13,17 @@ class _ProfilePageState extends State<ProfilePage> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // Get the current user from Supabase
+    _loadUserData();
+  }
+
+  void _loadUserData() {
     final currentUser = Supabase.instance.client.auth.currentUser;
     if (currentUser != null) {
-      // Populate the text fields with the user's data
       _nameController.text = currentUser.userMetadata?['full_name'] ?? '';
       _emailController.text = currentUser.email ?? '';
       _phoneController.text = currentUser.phone ?? '';
@@ -36,11 +38,34 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
+  Future<void> _updateProfile() async {
+    setState(() => _isLoading = true);
+    try {
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(
+          data: {'full_name': _nameController.text},
+        ),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Update failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _logout() async {
     try {
       await Supabase.instance.client.auth.signOut();
     } catch (e) {
-      // Handle potential errors during logout, though it's rare.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Logout failed: $e'), backgroundColor: Colors.red),
@@ -49,7 +74,6 @@ class _ProfilePageState extends State<ProfilePage> {
       return;
     }
 
-    // After successful logout, navigate back to the Login Screen.
     if (mounted) {
       Navigator.pushAndRemoveUntil(
         context,
@@ -88,16 +112,33 @@ class _ProfilePageState extends State<ProfilePage> {
               controller: _emailController,
               icon: Icons.email_outlined,
               hintText: 'Email address',
-              enabled: false, // Email is usually not editable
+              enabled: false,
             ),
             const SizedBox(height: 16),
             _buildProfileTextField(
               controller: _phoneController,
               icon: Icons.phone_outlined,
               hintText: 'Phone number',
-              enabled: false, // Phone number from auth is also not editable
+              enabled: false,
             ),
-            const SizedBox(height: 48),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _updateProfile,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text('Save Changes', style: TextStyle(fontSize: 16, color: Colors.white)),
+              ),
+            ),
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               height: 50,

@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:geo_connect/screens/main_screen/cart_provider.dart';
-import 'package:geo_connect/screens/main_screen/main_page.dart';
+import 'package:geo_connect/screens/auth_gate.dart';
+import 'package:geo_connect/providers/cart_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Load environment variables
+  await dotenv.load(fileName: ".env");
+
   await Supabase.initialize(
-    url: 'https://cvyhpuodwppxhzjgzfvg.supabase.co',
-    anonKey: 'sb_publishable_mUHSxk9Au87fg1bwIcwA6w_9OaVA8at',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
   runApp(
@@ -31,7 +36,7 @@ class MyApp extends StatelessWidget {
       title: 'DOOKO',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.green),
-      home: const MainPage(),
+      home: const AuthGate(),
     );
   }
 }

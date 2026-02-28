@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:geo_connect/screens/main_screen/map.dart';
 import 'package:geo_connect/screens/main_screen/profile.dart';
 import 'add_page.dart';
+import 'chat_page.dart';
 import 'home_page.dart';
 import 'listing.dart';
 
@@ -15,12 +15,11 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
 
-  // Correctly create HomePage without the title parameter.
   static const List<Widget> _pages = <Widget>[
     HomePage(),
     ListingPage(),
     AddPage(),
-    MapPage(),
+    ChatPage(),
     ProfilePage(),
   ];
 
@@ -54,8 +53,8 @@ class _MainPageState extends State<MainPage> {
             label: 'Add',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.map),
-            label: 'Map',
+            icon: Icon(Icons.chat_bubble_outline),
+            label: 'Chat',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.account_circle),

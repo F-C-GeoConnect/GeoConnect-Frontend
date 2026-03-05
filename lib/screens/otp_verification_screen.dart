@@ -1,12 +1,15 @@
-// OTP Verification Screen
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'main_screen/main_page.dart';
 
 class OTPVerificationScreen extends StatefulWidget {
-  final String phoneNumber;
+  final String email;
+  final String password; // Receive password for auto-login
 
   const OTPVerificationScreen({
     Key? key,
-    required this.phoneNumber,
+    required this.email,
+    required this.password,
   }) : super(key: key);
 
   @override
@@ -14,14 +17,10 @@ class OTPVerificationScreen extends StatefulWidget {
 }
 
 class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
-  final List<TextEditingController> _otpControllers = List.generate(
-    6,
-        (index) => TextEditingController(),
-  );
-  final List<FocusNode> _otpFocusNodes = List.generate(
-    6,
-        (index) => FocusNode(),
-  );
+  // Updated to handle 8 digits
+  final List<TextEditingController> _otpControllers = List.generate(8, (index) => TextEditingController());
+  final List<FocusNode> _otpFocusNodes = List.generate(8, (index) => FocusNode());
+  bool _isVerifying = false;
 
   @override
   void dispose() {
@@ -34,12 +33,81 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
     super.dispose();
   }
 
-  void _verifyOTP() {
-    String otp = _otpControllers.map((c) => c.text).join();
-    if (otp.length == 6) {
-      // Verify OTP with backend
-      print('Verifying OTP: $otp for ${widget.phoneNumber}');
-      // Navigate to home screen on success
+  Future<void> _verifyOTP() async {
+    if (_isVerifying) return;
+
+    final otp = _otpControllers.map((c) => c.text).join();
+    // Updated to check for 8 digits
+    if (otp.length != 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter the complete 8-digit code.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() {
+      _isVerifying = true;
+    });
+
+    try {
+      final supabase = Supabase.instance.client;
+      final response = await supabase.auth.verifyOTP(
+        type: OtpType.signup,
+        token: otp,
+        email: widget.email,
+      );
+
+      if (response.session != null) {
+        await supabase.auth.signInWithPassword(
+          email: widget.email,
+          password: widget.password,
+        );
+
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const MainPage()),
+                (Route<dynamic> route) => false,
+          );
+        }
+      } else {
+        throw const AuthException('Invalid OTP or session could not be created.');
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _resendOTP() async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.auth.resend(
+        type: OtpType.signup,
+        email: widget.email,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('A new verification code has been sent to your email.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -62,9 +130,8 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-
               const Text(
-                'Verify Phone',
+                'Verify Email',
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
@@ -72,9 +139,8 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-
               Text(
-                'Enter the 6-digit code sent to\n${widget.phoneNumber}',
+                'Enter the verification code sent to\n${widget.email}',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey[600],
@@ -82,13 +148,12 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                 ),
               ),
               const SizedBox(height: 40),
-
-              // OTP Input Fields
+              // --- 8-Digit OTP Input Fields ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(6, (index) {
+                children: List.generate(8, (index) {
                   return SizedBox(
-                    width: 50,
+                    width: 35, // Adjusted width to fit 8 boxes
                     child: TextFormField(
                       controller: _otpControllers[index],
                       focusNode: _otpFocusNodes[index],
@@ -96,7 +161,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                       keyboardType: TextInputType.number,
                       maxLength: 1,
                       style: const TextStyle(
-                        fontSize: 24,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
                       decoration: InputDecoration(
@@ -104,21 +169,22 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                         filled: true,
                         fillColor: Colors.grey[50],
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide.none,
                         ),
                         contentPadding: const EdgeInsets.symmetric(
-                          vertical: 16,
+                          vertical: 12,
                         ),
                       ),
                       onChanged: (value) {
-                        if (value.length == 1 && index < 5) {
+                        if (value.length == 1 && index < 7) {
                           _otpFocusNodes[index + 1].requestFocus();
                         } else if (value.isEmpty && index > 0) {
                           _otpFocusNodes[index - 1].requestFocus();
                         }
 
-                        if (index == 5 && value.isNotEmpty) {
+                        if (index == 7 && value.isNotEmpty) {
+                          _otpFocusNodes[index].unfocus(); // Unfocus after the last digit
                           _verifyOTP();
                         }
                       },
@@ -127,41 +193,28 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                 }),
               ),
               const SizedBox(height: 24),
-
-              // Resend Code
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    "Didn't receive code? ",
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
+                    "Didn't receive the code? ",
+                    style: TextStyle(color: Colors.grey[600]),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      // Resend OTP logic
-                    },
+                  TextButton(
+                    onPressed: _resendOTP,
                     child: const Text(
-                      'Resend',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF00A651),
-                        fontWeight: FontWeight.w600,
-                      ),
+                      'Resend Code',
+                      style: TextStyle(color: Color(0xFF00A651)),
                     ),
                   ),
                 ],
               ),
-                const SizedBox(height: 28),
-
-              // Verify Button
+              const SizedBox(height: 28),
               SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _verifyOTP,
+                  onPressed: _isVerifying ? null : _verifyOTP,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00A651),
                     shape: RoundedRectangleBorder(
@@ -169,7 +222,9 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                     ),
                     elevation: 0,
                   ),
-                  child: const Text(
+                  child: _isVerifying
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
                     'Verify',
                     style: TextStyle(
                       fontSize: 16,
@@ -179,7 +234,6 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 40),
             ],
           ),
         ),

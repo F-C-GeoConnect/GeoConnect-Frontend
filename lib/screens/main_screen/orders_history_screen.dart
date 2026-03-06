@@ -146,7 +146,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                               child: ElevatedButton(
                                 onPressed: () => _updateOrderStatus(order['id'], 'accepted'),
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                child: const Text('Accept Order', style: TextStyle(color: Colors.white)),
+                                child: const Text('Accept', style: TextStyle(color: Colors.white)),
                               ),
                             ),
                             const SizedBox(width: 12),

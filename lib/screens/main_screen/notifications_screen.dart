@@ -10,25 +10,124 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final SupabaseClient _supabase = Supabase.instance.client;
-  late final Stream<List<Map<String, dynamic>>> _notificationsStream;
+
+  List<Map<String, dynamic>> _notifications = [];
+  bool _isLoading = true;
+  RealtimeChannel? _channel;
 
   @override
   void initState() {
     super.initState();
+    _initRealtimeNotifications();
+  }
+
+  /// Fetches an initial snapshot then subscribes to realtime INSERT / UPDATE /
+  /// DELETE events — exactly mirroring the pattern used in home_page.dart so
+  /// both screens always show a consistent view of the notifications table.
+  void _initRealtimeNotifications() {
     final userId = _supabase.auth.currentUser?.id;
-    
-    if (userId != null) {
-      _notificationsStream = _supabase
+    if (userId == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    // 1. Populate the list immediately.
+    _fetchNotifications(userId);
+
+    // 2. Keep it in sync via realtime.
+    _channel = _supabase
+        .channel('notifications_screen:$userId')
+        .onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'notifications',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'user_id',
+        value: userId,
+      ),
+      callback: (payload) {
+        final newRecord = payload.newRecord;
+        if (newRecord.isNotEmpty) {
+          setState(() {
+            _notifications = [newRecord, ..._notifications];
+          });
+        }
+      },
+    )
+        .onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'notifications',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'user_id',
+        value: userId,
+      ),
+      callback: (payload) {
+        final updated = payload.newRecord;
+        if (updated.isNotEmpty) {
+          setState(() {
+            _notifications = _notifications.map((n) {
+              return n['id'] == updated['id'] ? updated : n;
+            }).toList();
+          });
+        }
+      },
+    )
+        .onPostgresChanges(
+      event: PostgresChangeEvent.delete,
+      schema: 'public',
+      table: 'notifications',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'user_id',
+        value: userId,
+      ),
+      callback: (payload) {
+        final deletedId = payload.oldRecord['id'];
+        if (deletedId != null) {
+          setState(() {
+            _notifications =
+                _notifications.where((n) => n['id'] != deletedId).toList();
+          });
+        }
+      },
+    )
+        .subscribe();
+  }
+
+  Future<void> _fetchNotifications(String userId) async {
+    try {
+      final data = await _supabase
           .from('notifications')
-          .stream(primaryKey: ['id'])
+          .select()
           .eq('user_id', userId)
           .order('created_at', ascending: false);
-    } else {
-      _notificationsStream = Stream.value([]);
+
+      if (mounted) {
+        setState(() {
+          _notifications = List<Map<String, dynamic>>.from(data);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching notifications: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  /// Marks a single notification as read.
+  /// The realtime UPDATE listener patches [_notifications] automatically,
+  /// but we also apply an optimistic update for instant UI feedback.
   Future<void> _markAsRead(String id) async {
+    // Optimistic update.
+    setState(() {
+      _notifications = _notifications.map((n) {
+        return n['id'].toString() == id ? {...n, 'is_read': true} : n;
+      }).toList();
+    });
+
     try {
       await _supabase
           .from('notifications')
@@ -36,6 +135,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           .eq('id', id);
     } catch (e) {
       debugPrint('Error marking notification as read: $e');
+      // Re-fetch to roll back on failure.
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId != null) _fetchNotifications(userId);
     }
   }
 
@@ -43,13 +145,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return;
 
+    final hasUnread = _notifications.any((n) => n['is_read'] == false);
+    if (!hasUnread) return;
+
+    // Optimistic update.
+    setState(() {
+      _notifications = _notifications.map((n) {
+        return n['is_read'] == false ? {...n, 'is_read': true} : n;
+      }).toList();
+    });
+
     try {
       await _supabase
           .from('notifications')
           .update({'is_read': true})
           .eq('user_id', userId)
           .eq('is_read', false);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('All notifications marked as read')),
@@ -57,18 +169,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       }
     } catch (e) {
       debugPrint('Error marking all as read: $e');
+      _fetchNotifications(userId);
     }
   }
 
   Future<void> _deleteNotification(String id) async {
+    // Optimistic removal — the DELETE realtime event will also fire, which is
+    // a no-op because the item is already gone from the list.
+    setState(() {
+      _notifications =
+          _notifications.where((n) => n['id'].toString() != id).toList();
+    });
+
     try {
-      await _supabase
-          .from('notifications')
-          .delete()
-          .eq('id', id);
+      await _supabase.from('notifications').delete().eq('id', id);
     } catch (e) {
       debugPrint('Error deleting notification: $e');
+      // Re-fetch to restore the item on failure.
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId != null) _fetchNotifications(userId);
     }
+  }
+
+  @override
+  void dispose() {
+    _channel?.unsubscribe();
+    super.dispose();
   }
 
   @override
@@ -76,8 +202,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Notifications', 
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)
+        title: const Text(
+          'Notifications',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -85,92 +212,96 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         actions: [
           TextButton(
             onPressed: _markAllAsRead,
-            child: const Text('Mark all read', style: TextStyle(color: Colors.green)),
+            child:
+            const Text('Mark all read', style: TextStyle(color: Colors.green)),
           ),
         ],
       ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _notificationsStream,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Colors.green));
-          }
-          
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.green))
+          : _notifications.isEmpty
+          ? Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.notifications_none,
+                size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              'No notifications yet',
+              style:
+              TextStyle(color: Colors.grey[600], fontSize: 16),
+            ),
+          ],
+        ),
+      )
+          : ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _notifications.length,
+        separatorBuilder: (context, index) =>
+        const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final notification = _notifications[index];
+          final bool isRead = notification['is_read'] ?? false;
+          final String type = notification['type'] ?? 'general';
+          final String id = notification['id'].toString();
 
-          final notifications = snapshot.data ?? [];
-
-          if (notifications.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+          return Dismissible(
+            key: Key(id),
+            direction: DismissDirection.endToStart,
+            background: Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 20),
+              color: Colors.red,
+              child:
+              const Icon(Icons.delete, color: Colors.white),
+            ),
+            // Optimistic removal happens inside _deleteNotification.
+            onDismissed: (_) => _deleteNotification(id),
+            child: ListTile(
+              onTap: () {
+                if (!isRead) _markAsRead(id);
+                _handleNotificationTap(
+                    type, notification['related_id']);
+              },
+              contentPadding: const EdgeInsets.symmetric(
+                  vertical: 8, horizontal: 8),
+              leading: _getNotificationIcon(type, isRead),
+              title: Text(
+                notification['title'] ?? 'Notification',
+                style: TextStyle(
+                  fontWeight: isRead
+                      ? FontWeight.normal
+                      : FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.notifications_none, size: 64, color: Colors.grey[300]),
-                  const SizedBox(height: 16),
-                  Text('No notifications yet', 
-                    style: TextStyle(color: Colors.grey[600], fontSize: 16)
+                  const SizedBox(height: 4),
+                  Text(
+                    notification['message'] ?? '',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatTimestamp(notification['created_at']),
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey[400]),
                   ),
                 ],
               ),
-            );
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: notifications.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final notification = notifications[index];
-              final bool isRead = notification['is_read'] ?? false;
-              final String type = notification['type'] ?? 'general';
-
-              return Dismissible(
-                key: Key(notification['id'].toString()),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  color: Colors.red,
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                onDismissed: (direction) => _deleteNotification(notification['id']),
-                child: ListTile(
-                  onTap: () {
-                    if (!isRead) _markAsRead(notification['id']);
-                    _handleNotificationTap(type, notification['related_id']);
-                  },
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                  leading: _getNotificationIcon(type, isRead),
-                  title: Text(
-                    notification['title'] ?? 'Notification',
-                    style: TextStyle(
-                      fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 4),
-                      Text(
-                        notification['message'] ?? '',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatTimestamp(notification['created_at']),
-                        style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                      ),
-                    ],
-                  ),
-                  trailing: !isRead 
-                    ? Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle))
-                    : null,
-                ),
-              );
-            },
+              trailing: !isRead
+                  ? Container(
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle),
+              )
+                  : null,
+            ),
           );
         },
       ),
@@ -226,19 +357,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   void _handleNotificationTap(String type, dynamic relatedId) {
-    // TODO: Add actual navigation when these screens are built
     switch (type) {
       case 'order':
-        // Navigator.push(context, MaterialPageRoute(builder: (context) => OrderDetails(id: relatedId)));
+      // Navigator.push(context, MaterialPageRoute(builder: (context) => OrderDetails(id: relatedId)));
         break;
       case 'selling':
-        // Navigator.push(context, MaterialPageRoute(builder: (context) => InventoryPage()));
+      // Navigator.push(context, MaterialPageRoute(builder: (context) => InventoryPage()));
         break;
       case 'availability':
-        // Navigator.push(context, MaterialPageRoute(builder: (context) => ProductProfile(id: relatedId)));
+      // Navigator.push(context, MaterialPageRoute(builder: (context) => ProductProfile(id: relatedId)));
         break;
       case 'delivery':
-        // Navigator.push(context, MaterialPageRoute(builder: (context) => MapTracking(id: relatedId)));
+      // Navigator.push(context, MaterialPageRoute(builder: (context) => MapTracking(id: relatedId)));
         break;
     }
   }

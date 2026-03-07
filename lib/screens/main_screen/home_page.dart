@@ -5,7 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/refreshable_scaffold.dart';
 import 'cart_screen.dart';
+import 'notifications_screen.dart';
 import 'map.dart';
+import 'dart:async';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,41 +20,181 @@ class _HomePageState extends State<HomePage> {
   late Stream<List<Map<String, dynamic>>> _productsStream;
   final _searchController = TextEditingController();
   String _searchText = '';
+  Timer? _debounce;
+
+  // --- REALTIME NOTIFICATIONS STATE ---
+  List<Map<String, dynamic>> _notifications = [];
+  RealtimeChannel? _notificationsChannel;
 
   @override
   void initState() {
     super.initState();
-    _initStream();
+    _initProductsStream();
+    _initRealtimeNotifications();
+    _searchController.addListener(_onSearchChanged);
+  }
 
-    _searchController.addListener(() {
+  void _onSearchChanged() {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
       setState(() {
         _searchText = _searchController.text;
       });
     });
   }
 
-  void _initStream() {
+  void _initProductsStream() {
     _productsStream = Supabase.instance.client
         .from('products')
         .stream(primaryKey: ['id']).order('created_at', ascending: false);
   }
 
-  Future<void> _handleRefresh() async {
+  /// Sets up a Supabase Realtime channel that listens for INSERT, UPDATE, and
+  /// DELETE events on the `notifications` table, filtered server-side to the
+  /// current user.  On every change the local [_notifications] list is updated
+  /// so the unread badge reflects reality instantly — no polling needed.
+  void _initRealtimeNotifications() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    // 1. Fetch the current snapshot so the badge is populated immediately.
+    _fetchNotifications(userId);
+
+    // 2. Subscribe to realtime changes.
+    _notificationsChannel = Supabase.instance.client
+        .channel('notifications:$userId')
+        .onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'notifications',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'user_id',
+        value: userId,
+      ),
+      callback: (payload) {
+        // A new notification arrived — prepend it.
+        final newRecord = payload.newRecord;
+        if (newRecord.isNotEmpty) {
+          setState(() {
+            _notifications = [newRecord, ..._notifications];
+          });
+        }
+      },
+    )
+        .onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'notifications',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'user_id',
+        value: userId,
+      ),
+      callback: (payload) {
+        // A notification was updated (e.g. marked as read) — patch in place.
+        final updated = payload.newRecord;
+        if (updated.isNotEmpty) {
+          setState(() {
+            _notifications = _notifications.map((n) {
+              return n['id'] == updated['id'] ? updated : n;
+            }).toList();
+          });
+        }
+      },
+    )
+        .onPostgresChanges(
+      event: PostgresChangeEvent.delete,
+      schema: 'public',
+      table: 'notifications',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'user_id',
+        value: userId,
+      ),
+      callback: (payload) {
+        // A notification was deleted — remove it.
+        final deletedId = payload.oldRecord['id'];
+        if (deletedId != null) {
+          setState(() {
+            _notifications =
+                _notifications.where((n) => n['id'] != deletedId).toList();
+          });
+        }
+      },
+    )
+        .subscribe();
+  }
+
+  Future<void> _fetchNotifications(String userId) async {
+    try {
+      final data = await Supabase.instance.client
+          .from('notifications')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+
+      if (mounted) {
+        setState(() {
+          _notifications = List<Map<String, dynamic>>.from(data);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching notifications: $e');
+    }
+  }
+
+  /// Marks all unread notifications as read in Supabase.
+  /// The realtime UPDATE listener above will automatically update [_notifications]
+  /// so the badge clears without an extra setState call — but we also update
+  /// locally for instant feedback.
+  Future<void> _markAllNotificationsAsRead() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    final hasUnread = _notifications.any((n) => n['is_read'] == false);
+    if (!hasUnread) return;
+
+    // Optimistic local update so the badge clears immediately.
     setState(() {
-      _initStream();
+      _notifications = _notifications.map((n) {
+        return n['is_read'] == false ? {...n, 'is_read': true} : n;
+      }).toList();
     });
-    // Small delay to make the refresh indicator visible
-    await Future.delayed(const Duration(milliseconds: 800));
+
+    try {
+      await Supabase.instance.client
+          .from('notifications')
+          .update({'is_read': true})
+          .eq('user_id', userId)
+          .eq('is_read', false);
+    } catch (e) {
+      debugPrint('Error marking notifications as read: $e');
+      // Roll back the optimistic update on failure.
+      final userId2 = Supabase.instance.client.auth.currentUser?.id;
+      if (userId2 != null) _fetchNotifications(userId2);
+    }
+  }
+
+  Future<void> _handleRefresh() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId != null) await _fetchNotifications(userId);
+    await Future.delayed(const Duration(milliseconds: 400));
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
+    // Always unsubscribe the realtime channel to avoid memory leaks.
+    _notificationsChannel?.unsubscribe();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final unreadCount = _notifications.where((n) => n['is_read'] == false).length;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -67,48 +209,87 @@ class _HomePageState extends State<HomePage> {
                     fontSize: 24)),
             Row(
               children: [
+                // Cart Icon and Badge
+                Consumer<CartProvider>(
+                  builder: (context, cart, child) => Stack(
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.shopping_basket_outlined,
+                            color: Colors.grey.shade700),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const CartScreen()),
+                          );
+                        },
+                      ),
+                      if (cart.itemCount > 0)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            constraints:
+                            const BoxConstraints(minWidth: 16, minHeight: 16),
+                            child: Text(
+                              cart.itemCount.toString(),
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 10),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                // Notifications Icon and Badge (driven by realtime state)
                 Stack(
                   children: [
                     IconButton(
-                      icon: Icon(Icons.shopping_basket_outlined,
+                      icon: Icon(Icons.notifications_outlined,
                           color: Colors.grey.shade700),
-                      onPressed: () {
+                      onPressed: () async {
+                        // Navigate first so the user can SEE the notifications,
+                        // then mark as read after the screen has opened.
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (context) => const CartScreen()),
-                        );
+                              builder: (context) => const NotificationsScreen()),
+                        ).then((_) {
+                          // Mark as read when the user returns from the screen.
+                          _markAllNotificationsAsRead();
+                        });
                       },
                     ),
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        constraints:
-                            const BoxConstraints(minWidth: 16, minHeight: 16),
-                        child: Consumer<CartProvider>(
-                          builder: (context, cart, child) => Text(
-                            cart.itemCount.toString(),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          constraints:
+                          const BoxConstraints(minWidth: 16, minHeight: 16),
+                          child: Text(
+                            unreadCount > 99 ? '99+' : unreadCount.toString(),
                             style: const TextStyle(
-                                color: Colors.white, fontSize: 10),
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold),
                             textAlign: TextAlign.center,
                           ),
                         ),
                       ),
-                    )
                   ],
-                ),
-                IconButton(
-                  icon: Icon(Icons.notifications_outlined,
-                      color: Colors.grey.shade700),
-                  onPressed: () {
-                    /* TODO: Navigate to Notifications */
-                  },
                 ),
               ],
             ),
@@ -232,11 +413,27 @@ class PromoBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.amber[100],
         borderRadius: BorderRadius.circular(15),
-        image: const DecorationImage(
-          image: NetworkImage(
-              'https://clipart-library.com/2023/5f0d0ab64520712d29e2c2fd_NEW20Summer20Market20Logo20white.png'),
-          fit: BoxFit.cover,
-        ),
+      ),
+      child: Image.network(
+        'https://clipart-library.com/2023/5f0d0ab64520712d29e2c2fd_NEW20Summer20Market20Logo20white.png',
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.amber[100],
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Center(
+              child: Text(
+                'Summer Market',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange[900]),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -249,8 +446,8 @@ class ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- SAFE DATA PARSING ---
-    final imageUrl = product['imageUrl'] as String? ?? 'https://i.imgur.com/S8A4L5p.png';
+    final imageUrl =
+        product['imageUrl'] as String? ?? 'https://i.imgur.com/S8A4L5p.png';
     final productId = (product['id'] as num?)?.toInt() ?? 0;
     final productName = product['productName'] as String? ?? 'No Name';
     final price = (product['price'] as num?)?.toDouble() ?? 0.0;
@@ -306,7 +503,7 @@ class ProductCard extends StatelessWidget {
                                 cart.toggleCartStatus(
                                     productId, productName, price, imageUrl);
                               } catch (e) {
-                                print('Error toggling cart: $e');
+                                debugPrint('Error toggling cart: $e');
                               }
                             },
                             constraints: const BoxConstraints(),
@@ -330,8 +527,8 @@ class ProductCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
                   Text('Rs.${price.toStringAsFixed(2)}',
-                      style: TextStyle(
-                          color: Colors.grey.shade800, fontSize: 14)),
+                      style:
+                      TextStyle(color: Colors.grey.shade800, fontSize: 14)),
                   const SizedBox(height: 4),
                   const Row(
                     children: [
@@ -340,7 +537,8 @@ class ProductCard extends StatelessWidget {
                       Text('4.5', style: TextStyle(fontSize: 12)),
                       SizedBox(width: 4),
                       Text('(123)',
-                          style: TextStyle(fontSize: 12, color: Colors.grey)),
+                          style:
+                          TextStyle(fontSize: 12, color: Colors.grey)),
                     ],
                   ),
                 ],

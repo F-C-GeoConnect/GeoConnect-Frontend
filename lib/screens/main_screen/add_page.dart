@@ -16,10 +16,11 @@ class _AddPageState extends State<AddPage> {
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _totalQuantityController = TextEditingController();
 
-  int _quantity = 1;
   File? _imageFile;
   bool _isUploading = false;
+  String _selectedUnit = 'per kg';
 
   Future<void> _pickImage() async {
     final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
@@ -30,39 +31,28 @@ class _AddPageState extends State<AddPage> {
     }
   }
 
-  /// A method to determine the current position of the device.
   Future<Position> _determinePosition() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      return Future.error('Location services are disabled. Please enable them in your settings.');
+      return Future.error('Location services are disabled.');
     }
-
-    permission = await Geolocator.checkPermission();
+    LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
         return Future.error('Location permissions are denied.');
       }
     }
-
     if (permission == LocationPermission.deniedForever) {
-      return Future.error(
-          'Location permissions are permanently denied, we cannot request permissions.');
+      return Future.error('Location permissions are permanently denied.');
     }
-
-    // Get current position
     return await Geolocator.getCurrentPosition();
   }
-
 
   Future<void> _postProduct() async {
     if (!_formKey.currentState!.validate() || _imageFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please fill all fields and add an image.')),
+        const SnackBar(content: Text('Please fill all fields and add an image.')),
       );
       return;
     }
@@ -72,54 +62,55 @@ class _AddPageState extends State<AddPage> {
     });
 
     try {
-      // --- Automatically get location before posting ---
-      final Position position = await _determinePosition();
-      // ---
-
       final supabase = Supabase.instance.client;
       final user = supabase.auth.currentUser;
 
       if (user == null) {
-        throw const AuthException('User not authenticated.');
+        throw const AuthException('User not authenticated. Please log in again.');
       }
 
+      final Position position = await _determinePosition();
       final imageFile = _imageFile!;
       final String fileName = '${DateTime.now().millisecondsSinceEpoch}.${imageFile.path.split('.').last}';
 
-      await supabase.storage
-          .from('product_images')
-          .upload(fileName, imageFile);
+      await supabase.storage.from('product_images').upload(fileName, imageFile);
+      final imageUrl = supabase.storage.from('product_images').getPublicUrl(fileName);
 
-      final imageUrl = supabase.storage
-          .from('product_images')
-          .getPublicUrl(fileName);
-
-      // Format the location data for PostGIS using the fetched position
       final locationString = 'POINT(${position.longitude} ${position.latitude})';
 
       await supabase.from('products').insert({
         'productName': _nameController.text,
         'price': double.tryParse(_priceController.text) ?? 0.0,
-        'quantity': _quantity,
         'description': _descriptionController.text,
         'imageUrl': imageUrl,
         'sellerName': user.userMetadata?['full_name'] ?? 'Anonymous Seller',
         'sellerID': user.id,
-        'location': locationString, // Save the auto-fetched location
+        'seller_id': user.id,
+        'location': locationString,
+        'unit': _selectedUnit,
+        'total_quantity': double.tryParse(_totalQuantityController.text) ?? 0.0,
+        'quantity': int.tryParse(_totalQuantityController.text) ?? 0,
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Product posted successfully!')),
-      );
-      _clearForm();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Product posted successfully!'), backgroundColor: Colors.green),
+        );
+        _clearForm();
+      }
+
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to post product: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to post product: $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
-      setState(() {
-        _isUploading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
     }
   }
 
@@ -127,10 +118,20 @@ class _AddPageState extends State<AddPage> {
     _nameController.clear();
     _priceController.clear();
     _descriptionController.clear();
+    _totalQuantityController.clear();
     setState(() {
-      _quantity = 1;
       _imageFile = null;
+      _selectedUnit = 'per kg';
     });
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _priceController.dispose();
+    _descriptionController.dispose();
+    _totalQuantityController.dispose();
+    super.dispose();
   }
 
   @override
@@ -138,10 +139,11 @@ class _AddPageState extends State<AddPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Product Detail'),
+        title: const Text('Post Your Produce'),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
+        foregroundColor: Colors.black87,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -153,26 +155,23 @@ class _AddPageState extends State<AddPage> {
               _buildImagePicker(),
               const SizedBox(height: 24),
               _buildTextField(_nameController, 'Product Name'),
+              const SizedBox(height: 24),
+              _buildUnitAndPriceSection(),
               const SizedBox(height: 16),
-              _buildQuantityAndPrice(),
-              const SizedBox(height: 16),
-              _buildTextField(_descriptionController, 'Product Detail'),
+              _buildTextField(_descriptionController, 'Product Detail', maxLines: 3),
               const SizedBox(height: 32),
               _isUploading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: CircularProgressIndicator(color: Colors.green))
                   : ElevatedButton(
                 onPressed: _postProduct,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[200],
+                  backgroundColor: Colors.green,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(
-                  'Post Product',
-                  style: TextStyle(color: Colors.black54, fontSize: 16),
-                ),
+                child: const Text('Post Product', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -188,8 +187,9 @@ class _AddPageState extends State<AddPage> {
         height: 200,
         width: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.grey[200],
+          color: Colors.grey[100],
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300),
         ),
         child: _imageFile != null
             ? ClipRRect(
@@ -201,41 +201,81 @@ class _AddPageState extends State<AddPage> {
           children: [
             Icon(Icons.camera_alt_outlined, color: Colors.grey[600], size: 40),
             const SizedBox(height: 8),
-            const Text('Change photo', style: TextStyle(color: Colors.black54)),
+            const Text('Upload Product Photo', style: TextStyle(color: Colors.black54)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label) {
+  Widget _buildTextField(TextEditingController controller, String label, {int maxLines = 1}) {
     return TextFormField(
       controller: controller,
+      maxLines: maxLines,
       decoration: InputDecoration(
         labelText: label,
+        alignLabelWithHint: true,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
       validator: (value) => value!.isEmpty ? '$label can\'t be empty' : null,
     );
   }
 
-  Widget _buildQuantityAndPrice() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+  Widget _buildUnitAndPriceSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('1kg, Price', style: TextStyle(fontSize: 16)),
-        const Spacer(),
-        IconButton(icon: const Icon(Icons.remove), onPressed: () => setState(() => _quantity > 1 ? _quantity-- : null)),
-        Text('$_quantity', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        IconButton(icon: const Icon(Icons.add), onPressed: () => setState(() => _quantity++)),
-        const SizedBox(width: 20),
-        Expanded(
-          child: TextFormField(
-            controller: _priceController,
-            decoration: const InputDecoration(labelText: 'Rs.'),
-            keyboardType: TextInputType.number,
-            validator: (value) => value!.isEmpty ? 'Price is required' : null,
+        const Text('Pricing & Quantity', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 2,
+              child: TextFormField(
+                controller: _priceController,
+                decoration: InputDecoration(
+                  labelText: 'Price',
+                  prefixText: 'Rs. ',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                keyboardType: TextInputType.number,
+                validator: (value) => value!.isEmpty ? 'Price is required' : null,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 3,
+              child: DropdownButtonFormField<String>(
+                value: _selectedUnit,
+                decoration: InputDecoration(
+                  labelText: 'Unit',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                items: ['per kg', 'per liter', 'per piece']
+                    .map((label) => DropdownMenuItem(child: Text(label), value: label))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _selectedUnit = value;
+                    });
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _totalQuantityController,
+          decoration: InputDecoration(
+            labelText: 'Total Quantity Available',
+            suffixText: _selectedUnit.replaceAll('per ', ''),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
+          keyboardType: TextInputType.number,
+          validator: (value) => value!.isEmpty ? 'Total quantity is required' : null,
         ),
       ],
     );

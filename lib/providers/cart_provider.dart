@@ -61,16 +61,7 @@ class CartProvider with ChangeNotifier {
   // Call this from the cart screen + button
   void incrementItem(int productId) {
     if (!_items.containsKey(productId)) return;
-    _items.update(
-      productId,
-          (existing) => CartItem(
-        id: existing.id,
-        name: existing.name,
-        price: existing.price,
-        image: existing.image,
-        quantity: existing.quantity + 1,
-      ),
-    );
+    _items[productId]!.quantity++;
     notifyListeners();
   }
 
@@ -78,16 +69,7 @@ class CartProvider with ChangeNotifier {
   void decrementItem(int productId) {
     if (!_items.containsKey(productId)) return;
     if (_items[productId]!.quantity > 1) {
-      _items.update(
-        productId,
-            (existing) => CartItem(
-          id: existing.id,
-          name: existing.name,
-          price: existing.price,
-          image: existing.image,
-          quantity: existing.quantity - 1,
-        ),
-      );
+      _items[productId]!.quantity--;
     } else {
       _items.remove(productId);
     }

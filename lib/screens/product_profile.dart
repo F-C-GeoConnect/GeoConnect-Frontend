@@ -71,14 +71,12 @@ class _ProductProfilePageState extends State<ProductProfilePage> {
   Widget _buildProductHeader() {
     final productName = (widget.product['productName'] as String?)?.trim() ?? 'Unnamed Product';
     final imageUrl = (widget.product['imageUrl'] as String?)?.trim() ?? '';
-    final price = widget.product['price'];
+    final priceValue = widget.product['price'];
 
     // Validate price
-    if (price == null || (price is! num) || price < 0) {
-      return const Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Text('Invalid product data'),
-      );
+    double price = 0.0;
+    if (priceValue is num && priceValue > 0) {
+      price = priceValue.toDouble();
     }
 
     return Row(

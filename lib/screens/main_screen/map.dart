@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../product_profile.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -12,32 +13,35 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
+  late Future<Position> _locationFuture;
 
-  /// A method to determine the current position of the device.
+  @override
+  void initState() {
+    super.initState();
+    _locationFuture = _determinePosition();
+  }
+
+  Future<void> _retryLocation() async {
+    setState(() {
+      _locationFuture = _determinePosition();
+    });
+  }
+
   Future<Position> _determinePosition() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    // Test if location services are enabled.
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       return Future.error('Location services are disabled.');
     }
-
-    permission = await Geolocator.checkPermission();
+    LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
         return Future.error('Location permissions are denied');
       }
     }
-
     if (permission == LocationPermission.deniedForever) {
-      // Permissions are denied forever, handle appropriately.
-      return Future.error(
-          'Location permissions are permanently denied, we cannot request permissions.');
+      return Future.error('Location permissions are permanently denied.');
     }
-
     return await Geolocator.getCurrentPosition();
   }
 
@@ -47,22 +51,58 @@ class _MapPageState extends State<MapPage> {
       appBar: AppBar(
         title: const Text('Products Near You'),
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh Products',
+            onPressed: () => setState(() {}),
+          ),
+        ],
       ),
       body: FutureBuilder<Position>(
-        future: _determinePosition(),
+        future: _locationFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator(color: Colors.green));
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.location_off, size: 64, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    Text(
+                      snapshot.error.toString(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: _retryLocation,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Try Again'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                    ),
+                    if (snapshot.error.toString().contains('disabled')) ...[
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () => Geolocator.openLocationSettings(),
+                        child: const Text('Open Settings'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
           }
           if (!snapshot.hasData) {
             return const Center(child: Text('Could not fetch location.'));
           }
 
           final userLocation = LatLng(snapshot.data!.latitude, snapshot.data!.longitude);
-
           return ProductMap(userLocation: userLocation);
         },
       ),
@@ -70,7 +110,6 @@ class _MapPageState extends State<MapPage> {
   }
 }
 
-// Extracted the map into its own widget for better organization
 class ProductMap extends StatefulWidget {
   final LatLng userLocation;
   const ProductMap({super.key, required this.userLocation});
@@ -80,104 +119,171 @@ class ProductMap extends StatefulWidget {
 }
 
 class _ProductMapState extends State<ProductMap> {
-  late final Stream<List<Map<String, dynamic>>> _productsStream;
+  final MapController _mapController = MapController();
+  late Future<List<Map<String, dynamic>>> _productsFuture;
 
   @override
   void initState() {
     super.initState();
-    // The correct way to filter a stream on the client-side.
-    _productsStream = Supabase.instance.client
-        .from('products')
-        .stream(primaryKey: ['id'])
-    // Use a .map transform to filter the list of results from the stream
-        .map((listOfMaps) {
-      return listOfMaps
-          .where((map) => map['location'] != null)
-          .toList();
-    });
+    _productsFuture = _getProductsForMap();
+  }
+
+  Future<List<Map<String, dynamic>>> _getProductsForMap() async {
+    try {
+      final response = await Supabase.instance.client.rpc('get_products_for_map');
+      return (response as List).map((item) => item as Map<String, dynamic>).toList();
+    } catch (e) {
+      debugPrint('Error calling RPC: $e');
+      return [];
+    }
+  }
+
+  Marker _createProductMarker(BuildContext context, Map<String, dynamic> product) {
+    final latitude = product['latitude'] as double? ?? 0.0;
+    final longitude = product['longitude'] as double? ?? 0.0;
+    final imageUrl = product['imageUrl'] as String? ?? 'https://i.imgur.com/S8A4L5p.png';
+    final name = product['productName'] ?? 'No Name';
+
+    // Calculate distance
+    double distanceInMeters = Geolocator.distanceBetween(
+      widget.userLocation.latitude,
+      widget.userLocation.longitude,
+      latitude,
+      longitude,
+    );
+    String distanceString = distanceInMeters < 1000
+        ? '${distanceInMeters.toStringAsFixed(0)}m away'
+        : '${(distanceInMeters / 1000).toStringAsFixed(1)}km away';
+
+    return Marker(
+      width: 60,
+      height: 70,
+      point: LatLng(latitude, longitude),
+      child: GestureDetector(
+        onTap: () {
+          showModalBottomSheet(
+            context: context,
+            backgroundColor: Colors.transparent,
+            builder: (context) {
+              return Card(
+                margin: const EdgeInsets.all(16.0),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: ListTile(
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        imageUrl,
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => const Icon(Icons.broken_image, size: 40),
+                      ),
+                    ),
+                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Rs. ${product['price'] ?? 0}'),
+                        Text(distanceString, style: TextStyle(color: Colors.green.shade700, fontSize: 12)),
+                      ],
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => ProductProfilePage(product: product)),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          );
+        },
+        child: Semantics(
+          label: 'Product: $name at $distanceString',
+          child: Stack(
+            alignment: Alignment.topCenter,
+            children: [
+              const Positioned(
+                bottom: 0,
+                child: Icon(Icons.location_on, color: Colors.green, size: 50),
+              ),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2)),
+                  ],
+                  border: Border.all(color: Colors.green, width: 2),
+                  image: DecorationImage(
+                    image: NetworkImage(imageUrl),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    return Stack(
+      children: [
+        FutureBuilder<List<Map<String, dynamic>>>(
+          future: _productsFuture,
+          builder: (context, snapshot) {
+            final products = snapshot.data ?? [];
+            final productMarkers = products.map((product) => _createProductMarker(context, product)).toList();
 
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _productsStream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-        final products = snapshot.data ?? [];
-
-        // Create markers for the products with conditional styling
-        final productMarkers = products.map((product) {
-          final pointString = product['location'] as String?;
-          if (pointString == null) return null;
-
-          final coords = pointString.replaceAll('POINT(', '').replaceAll(')', '').split(' ');
-          if (coords.length != 2) return null;
-
-          final longitude = double.tryParse(coords[0]);
-          final latitude = double.tryParse(coords[1]);
-
-          if (latitude == null || longitude == null) return null;
-
-          final sellerId = product['sellerID'] as String?;
-          final isOwnProduct = sellerId == currentUserId;
-
-          return Marker(
-            width: 40.0,
-            height: 40.0,
-            alignment: Alignment.topCenter,
-            point: LatLng(latitude, longitude),
-            child: GestureDetector(
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(product['productName'] ?? 'No name')),
-                );
-              },
-              // --- Updated Marker Logic ---
-              child: isOwnProduct
-                  ? Image.asset('assets/map_pointer.png') // User's own products
-                  : const Icon( // Other users' products
-                Icons.location_on,
-                color: Colors.green,
-                size: 40,
+            return FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: widget.userLocation,
+                initialZoom: 13.0,
               ),
-            ),
-          );
-        }).whereType<Marker>().toList();
-
-        // Create a separate marker for the user's current location with a blue pointer
-        final userLocationMarker = Marker(
-          point: widget.userLocation,
-          child: const Icon(
-            Icons.location_on, // Standard pointer
-            color: Colors.blue,   // Blue color for the user
-            size: 40,
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.geo_connect.app',
+                ),
+                MarkerLayer(markers: productMarkers),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: widget.userLocation,
+                      child: const Icon(Icons.person_pin_circle, color: Colors.blue, size: 44),
+                    )
+                  ],
+                )
+              ],
+            );
+          },
+        ),
+        Positioned(
+          bottom: 24,
+          right: 16,
+          child: FloatingActionButton(
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.green,
+            onPressed: () {
+              _mapController.move(widget.userLocation, 14.0);
+            },
+            tooltip: 'Recenter to my location',
+            child: const Icon(Icons.my_location),
           ),
-        );
-
-        return FlutterMap(
-          options: MapOptions(
-            initialCenter: widget.userLocation, // Center on user's location
-            initialZoom: 13.0,
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.example.untitled1', // Replace with your actual package name if different
-            ),
-            MarkerLayer(
-              // Combine the user's location marker with the product markers
-              markers: [userLocationMarker, ...productMarkers],
-            ),
-          ],
-        );
-      },
+        ),
+      ],
     );
   }
 }

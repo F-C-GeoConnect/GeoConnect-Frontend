@@ -1,6 +1,6 @@
 import 'package:latlong2/latlong.dart';
 
-enum UserRole { farmer, consumer, both }
+enum UserRole { farmer, consumer, both, admin }
 
 class UserProfile {
   final String id;
@@ -43,6 +43,7 @@ class UserProfile {
       case 'farmer': return UserRole.farmer;
       case 'consumer': return UserRole.consumer;
       case 'both': return UserRole.both;
+      case 'admin': return UserRole.admin;
       default: return UserRole.consumer;
     }
   }
@@ -58,4 +59,5 @@ class UserProfile {
 
   bool get isFarmer => role == UserRole.farmer || role == UserRole.both;
   bool get isConsumer => role == UserRole.consumer || role == UserRole.both;
+  bool get isAdmin => role == UserRole.admin;
 }

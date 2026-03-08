@@ -3,6 +3,7 @@ import 'package:geo_connect/providers/cart_provider.dart';
 import 'package:provider/provider.dart';
 import 'farmer_profile_page.dart';
 import 'main_screen/chat_page.dart';
+import '../widgets/seller_rating.dart';
 
 class ProductProfilePage extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -72,6 +73,7 @@ class _ProductProfilePageState extends State<ProductProfilePage> {
     final productName = (widget.product['productName'] as String?)?.trim() ?? 'Unnamed Product';
     final imageUrl = (widget.product['imageUrl'] as String?)?.trim() ?? '';
     final priceValue = widget.product['price'];
+    final sellerId = widget.product['seller_id'] as String? ?? '';
 
     // Validate price
     double price = 0.0;
@@ -103,7 +105,7 @@ class _ProductProfilePageState extends State<ProductProfilePage> {
                 productName,
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              const Text('Add more Items'),
+              SellerRating(sellerId: sellerId), // Added real rating data
             ],
           ),
         ),
@@ -158,6 +160,7 @@ class _ProductProfilePageState extends State<ProductProfilePage> {
     final productName = widget.product['productName'] as String? ?? 'Unnamed Product';
     final price = widget.product['price'] as double? ?? 0.0;
     final imageUrl = widget.product['imageUrl'] as String? ?? '';
+    final sellerId = widget.product['seller_id'] as String? ?? ''; // Get seller_id
 
     return ElevatedButton(
       onPressed: () {
@@ -166,6 +169,7 @@ class _ProductProfilePageState extends State<ProductProfilePage> {
           productName,
           price,
           imageUrl,
+          sellerId, // Pass sellerId
         );
         // We need to rebuild the widget to see the button color change
         setState(() {});

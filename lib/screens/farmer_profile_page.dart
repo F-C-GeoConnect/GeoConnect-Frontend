@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main_screen/chat_page.dart';
+import '../widgets/seller_rating.dart';
 
 class FarmerProfilePage extends StatefulWidget {
   final String farmerId;
@@ -21,8 +22,6 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
 
-  double _averageRating = 0.0;
-  int _totalRatings = 0;
   int _userSelectedRating = 0;
   List<Map<String, dynamic>> _comments = [];
   List<Map<String, dynamic>> _farmerProducts = [];
@@ -36,7 +35,7 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
 
   Future<void> _loadInitialData() async {
     await Future.wait([
-      _fetchFarmerData(),
+      _fetchFarmerReviews(),
       _fetchFarmerProducts(),
     ]);
     if (mounted) setState(() => _isLoading = false);
@@ -59,7 +58,7 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
     }
   }
 
-  Future<void> _fetchFarmerData({bool updateController = true}) async {
+  Future<void> _fetchFarmerReviews({bool updateController = true}) async {
     try {
       final reviews = await _supabase
           .from('farmer_reviews')
@@ -69,15 +68,12 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
 
       if (reviews != null) {
         final List<dynamic> reviewList = reviews as List;
-        double sum = 0;
         final currentUserId = _supabase.auth.currentUser?.id;
 
         int foundRating = 0;
         String foundComment = '';
 
         for (var review in reviewList) {
-          sum += (review['rating'] as num).toDouble();
-
           if (currentUserId != null && review['user_id'] == currentUserId) {
             foundRating = review['rating'] as int;
             foundComment = review['comment'] ?? '';
@@ -93,8 +89,6 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
             );
           }
           _comments = List<Map<String, dynamic>>.from(reviewList);
-          _averageRating = reviewList.isNotEmpty ? sum / reviewList.length : 0.0;
-          _totalRatings = reviewList.length;
         });
       }
     } catch (e) {
@@ -127,7 +121,7 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
       });
 
       // Refresh list to show the new "physical" comment
-      await _fetchFarmerData(updateController: false);
+      await _fetchFarmerReviews(updateController: false);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -155,7 +149,7 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
         _commentController.clear();
       });
 
-      await _fetchFarmerData(updateController: false);
+      await _fetchFarmerReviews(updateController: false);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -406,10 +400,7 @@ class _FarmerProfilePageState extends State<FarmerProfilePage> {
                   child: Row(
                     children: [
                       const Text('Rating ', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                      const Icon(Icons.star, color: Colors.orange, size: 14),
-                      Text(' ${_averageRating.toStringAsFixed(1)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                      Text(' ($_totalRatings reviews)', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      SellerRating(sellerId: widget.farmerId),
                     ],
                   ),
                 ),

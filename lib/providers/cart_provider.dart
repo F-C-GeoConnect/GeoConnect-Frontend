@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/chat_service.dart'; // Import ChatService to use its helper
 
 class CartItem {
   final int id;
   final String name;
   final double price;
   final String image;
+  final String sellerId; // Added sellerId
   int quantity;
 
   CartItem({
@@ -13,6 +16,7 @@ class CartItem {
     required this.price,
     required this.image,
     required this.quantity,
+    required this.sellerId, // Added sellerId
   });
 }
 
@@ -40,7 +44,7 @@ class CartProvider with ChangeNotifier {
 
   // Call this from product cards to add/remove items
   void toggleCartStatus(
-      int productId, String name, double price, String image) {
+      int productId, String name, double price, String image, String sellerId) { // Added sellerId
     if (isItemInCart(productId)) {
       _items.remove(productId);
     } else {
@@ -52,6 +56,7 @@ class CartProvider with ChangeNotifier {
           price: price,
           image: image,
           quantity: 1,
+          sellerId: sellerId, // Added sellerId
         ),
       );
     }
@@ -85,5 +90,42 @@ class CartProvider with ChangeNotifier {
   void clearCart() {
     _items.clear();
     notifyListeners();
+  }
+
+  // New checkout method
+  Future<void> checkout(SupabaseClient supabase, String currentUserId) async {
+    if (_items.isEmpty) {
+      print("Cart is empty. No items to checkout.");
+      return;
+    }
+
+    final Set<String> distinctSellerIds = {};
+    _items.forEach((key, cartItem) {
+      distinctSellerIds.add(cartItem.sellerId);
+    });
+
+    for (final sellerId in distinctSellerIds) {
+      // Use the official helper for consistent conversation ID generation
+      final conversationId = ChatService.buildConversationId(
+        currentUserId,
+        sellerId,
+      );
+      try {
+        await supabase.from('messages').insert({
+          'sender_id': currentUserId,
+          'receiver_id': sellerId,
+          'content': "Hey, I'm interested in your product.",
+          'conversation_id': conversationId,
+        });
+        print("Message sent to seller: $sellerId with conversation ID: $conversationId");
+      } catch (e) {
+        print("Error sending message to seller $sellerId: $e");
+        // Optionally, handle error more gracefully, e.g., re-throw or log to a crash reporting service
+      }
+    }
+
+    _items.clear();
+    notifyListeners();
+    print("Checkout complete and cart cleared.");
   }
 }

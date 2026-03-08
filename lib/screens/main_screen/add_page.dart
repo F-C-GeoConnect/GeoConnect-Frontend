@@ -22,79 +22,14 @@ class _AddPageState extends State<AddPage> {
   bool _isUploading = false;
   String _selectedUnit = 'per kg';
 
-  // Combined logic to handle both "Take a photo" and "Upload from gallery"
-  Future<void> _pickImage(ImageSource source) async {
-    final pickedFile = await ImagePicker().pickImage(source: source);
+  // UPDATED: Changed ImageSource to camera
+  Future<void> _pickImage() async {
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.camera);
     if (pickedFile != null) {
       setState(() {
         _imageFile = File(pickedFile.path);
       });
     }
-  }
-
-  void _showImageSourceDialog() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Select Image Source',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildSourceOption(
-                    icon: Icons.camera_alt,
-                    label: 'Camera',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _pickImage(ImageSource.camera);
-                    },
-                  ),
-                  _buildSourceOption(
-                    icon: Icons.photo_library,
-                    label: 'Gallery',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _pickImage(ImageSource.gallery);
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSourceOption({required IconData icon, required String label, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.green, size: 30),
-          ),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
   }
 
   Future<Position> _determinePosition() async {
@@ -142,7 +77,6 @@ class _AddPageState extends State<AddPage> {
       await supabase.storage.from('product_images').upload(fileName, imageFile);
       final imageUrl = supabase.storage.from('product_images').getPublicUrl(fileName);
 
-      // Using longitude first for PostGIS geography
       final locationString = 'POINT(${position.longitude} ${position.latitude})';
 
       await supabase.from('products').insert({
@@ -161,7 +95,7 @@ class _AddPageState extends State<AddPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Product posted successfully!'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Product posted successfully!')),
         );
         _clearForm();
       }
@@ -169,7 +103,7 @@ class _AddPageState extends State<AddPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to post product: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Failed to post product: $e')),
         );
       }
     } finally {
@@ -206,11 +140,10 @@ class _AddPageState extends State<AddPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Post Your Produce'),
+        title: const Text('Product Detail'),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
-        foregroundColor: Colors.black87,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -228,7 +161,7 @@ class _AddPageState extends State<AddPage> {
               _buildTextField(_descriptionController, 'Product Detail', maxLines: 3),
               const SizedBox(height: 32),
               _isUploading
-                  ? const Center(child: CircularProgressIndicator(color: Colors.green))
+                  ? const Center(child: CircularProgressIndicator())
                   : ElevatedButton(
                 onPressed: _postProduct,
                 style: ElevatedButton.styleFrom(
@@ -238,7 +171,7 @@ class _AddPageState extends State<AddPage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text('Post Product', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                child: const Text('Post Product', style: TextStyle(color: Colors.white, fontSize: 16)),
               ),
             ],
           ),
@@ -249,14 +182,13 @@ class _AddPageState extends State<AddPage> {
 
   Widget _buildImagePicker() {
     return GestureDetector(
-      onTap: _showImageSourceDialog,
+      onTap: _pickImage,
       child: Container(
         height: 200,
         width: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.grey[100],
+          color: Colors.grey[200],
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300),
         ),
         child: _imageFile != null
             ? ClipRRect(
@@ -266,10 +198,9 @@ class _AddPageState extends State<AddPage> {
             : Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.add_a_photo_outlined, color: Colors.grey[600], size: 40),
+            Icon(Icons.camera_alt_outlined, color: Colors.grey[600], size: 40),
             const SizedBox(height: 8),
-            const Text('Add Product Photo', style: TextStyle(color: Colors.black54)),
-            const Text('(Take a photo or upload)', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const Text('Take a photo', style: TextStyle(color: Colors.black54)), // Updated text
           ],
         ),
       ),

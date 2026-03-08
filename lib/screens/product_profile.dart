@@ -82,6 +82,7 @@ class _ProductProfilePageState extends State<ProductProfilePage> {
     }
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8.0),
@@ -96,32 +97,37 @@ class _ProductProfilePageState extends State<ProductProfilePage> {
                 )
               : const Icon(Icons.image_not_supported, size: 60),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 productName,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-              SellerRating(sellerId: sellerId), // Added real rating data
+              const SizedBox(height: 4),
+              SellerRating(sellerId: sellerId), 
             ],
           ),
         ),
+        const SizedBox(width: 8),
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
               'Rs.${price.toStringAsFixed(2)}',
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green),
             ),
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.remove_circle_outline,
-                      color: Colors.green),
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(4),
+                  icon: const Icon(Icons.remove_circle_outline, color: Colors.green, size: 24),
                   onPressed: () {
                     if (_quantity > 1) {
                       setState(() {
@@ -130,11 +136,11 @@ class _ProductProfilePageState extends State<ProductProfilePage> {
                     }
                   },
                 ),
-                Text('$_quantity',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
+                Text('$_quantity', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 IconButton(
-                  icon: const Icon(Icons.add_circle, color: Colors.green),
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(4),
+                  icon: const Icon(Icons.add_circle, color: Colors.green, size: 24),
                   onPressed: () {
                     setState(() {
                       _quantity++;
@@ -217,10 +223,12 @@ class _ProductProfilePageState extends State<ProductProfilePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  productName,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
+                Expanded(
+                  child: Text(
+                    productName,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 Text(
                   _daysAgo(),

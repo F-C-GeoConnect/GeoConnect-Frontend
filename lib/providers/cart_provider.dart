@@ -110,17 +110,29 @@ class CartProvider with ChangeNotifier {
         currentUserId,
         sellerId,
       );
+      
       try {
+        // 1. Send the automated Chat Message
         await supabase.from('messages').insert({
           'sender_id': currentUserId,
           'receiver_id': sellerId,
           'content': "Hey, I'm interested in your product.",
           'conversation_id': conversationId,
         });
-        print("Message sent to seller: $sellerId with conversation ID: $conversationId");
+        print("Message sent to seller: $sellerId");
+
+        // 2. Send the In-App Notification (Bell icon)
+        await supabase.from('notifications').insert({
+          'user_id': sellerId,
+          'title': 'New Order Received!',
+          'message': 'Someone just placed an order for your products.',
+          'type': 'order',
+          'is_read': false,
+        });
+        print("Notification sent to seller: $sellerId");
+
       } catch (e) {
-        print("Error sending message to seller $sellerId: $e");
-        // Optionally, handle error more gracefully, e.g., re-throw or log to a crash reporting service
+        print("Error during checkout notifications for seller $sellerId: $e");
       }
     }
 

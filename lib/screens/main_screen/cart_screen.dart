@@ -192,23 +192,34 @@ class _CartScreenState extends State<CartScreen> {
                         errorBuilder: (c, e, s) => const Icon(Icons.image_not_supported, size: 60),
                       ),
                     ),
-                    title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("Rs. ${item.price.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w500)),
+                    title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Rs. ${item.price.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w500)),
+                      ],
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.remove_circle_outline, color: Colors.green),
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.all(4),
+                          icon: const Icon(Icons.remove_circle_outline, color: Colors.green, size: 24),
                           onPressed: () => cart.decrementItem(item.id),
                         ),
                         Text('${item.quantity}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         IconButton(
-                          icon: const Icon(Icons.add_circle_outline, color: Colors.green),
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.all(4),
+                          icon: const Icon(Icons.add_circle_outline, color: Colors.green, size: 24),
                           onPressed: () => cart.incrementItem(item.id),
                         ),
                         const SizedBox(width: 4),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.all(4),
+                          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 24),
                           onPressed: () => cart.removeItem(item.id),
                         ),
                       ],
@@ -228,19 +239,26 @@ class _CartScreenState extends State<CartScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text("Total Amount", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                      Text("Rs. ${cart.totalAmount.toStringAsFixed(2)}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text("Total Amount", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        Text(
+                          "Rs. ${cart.totalAmount.toStringAsFixed(2)}",
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: _isProcessing ? null : () => _processCheckout(cart),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
-                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     child: _isProcessing

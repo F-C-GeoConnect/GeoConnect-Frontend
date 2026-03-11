@@ -109,10 +109,10 @@ class _HomePageState extends State<HomePage> {
 
     try {
       final newProducts = await _productService.getProductsForHomepage(
-        offset: _currentOffset, 
-        limit: _pageSize
+          offset: _currentOffset,
+          limit: _pageSize
       );
-      
+
       if (mounted) {
         setState(() {
           _allProducts.addAll(newProducts);
@@ -193,8 +193,8 @@ class _HomePageState extends State<HomePage> {
 
       if (location.length >= 50) {
         final hex = location.trim().toUpperCase();
-        final lng = _parseWkbDouble(hex, 18); 
-        final lat = _parseWkbDouble(hex, 34); 
+        final lng = _parseWkbDouble(hex, 18);
+        final lat = _parseWkbDouble(hex, 34);
         if (lat != null && lng != null) return _LatLng(lat, lng);
       }
     } catch (e) {
@@ -456,8 +456,25 @@ class _HomePageState extends State<HomePage> {
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(30),
             borderSide: BorderSide.none),
-        suffixIcon: IconButton(
-            icon: const Icon(Icons.filter_list), onPressed: _showRadiusFilter),
+        suffixIcon: GestureDetector(
+          onTap: _showRadiusFilter,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Filter',
+                style: TextStyle(
+                  color: Colors.green.shade700,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.filter_list),
+              const SizedBox(width: 8),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -514,10 +531,24 @@ class _HomePageState extends State<HomePage> {
         Text(title,
             style:
             const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        IconButton(
-          onPressed: () => Navigator.push(context,
+        GestureDetector(
+          onTap: () => Navigator.push(context,
               MaterialPageRoute(builder: (context) => const MapPage())),
-          icon: const Icon(Icons.map_outlined, color: Colors.green),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Map',
+                style: TextStyle(
+                  color: Colors.green.shade700,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.map_outlined, color: Colors.green),
+            ],
+          ),
         ),
       ],
     );
@@ -539,7 +570,7 @@ class _HomePageState extends State<HomePage> {
     }
 
     if (_currentUserPosition == null && _isLoading) {
-       return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator());
     }
 
     final filteredProducts = _allProducts.where((product) {

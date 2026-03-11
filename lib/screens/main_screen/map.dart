@@ -15,18 +15,6 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   late Future<Position> _locationFuture;
-  String _selectedCategory = 'All';
-
-  final List<String> _categories = [
-    'All',
-    'Vegetables',
-    'Fruits',
-    'Dairy',
-    'Grains',
-    'Meat & Fish',
-    'Honey',
-    'Others'
-  ];
 
   @override
   void initState() {
@@ -74,63 +62,21 @@ class _MapPageState extends State<MapPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildCategoryFilter(),
-          Expanded(
-            child: FutureBuilder<Position>(
-              future: _locationFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: Colors.green));
-                }
-                if (snapshot.hasError) {
-                  return _buildErrorState(snapshot.error.toString());
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: Text('Could not fetch location.'));
-                }
+      body: FutureBuilder<Position>(
+        future: _locationFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: Colors.green));
+          }
+          if (snapshot.hasError) {
+            return _buildErrorState(snapshot.error.toString());
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: Text('Could not fetch location.'));
+          }
 
-                final userLocation = LatLng(snapshot.data!.latitude, snapshot.data!.longitude);
-                return ProductMap(
-                  userLocation: userLocation, 
-                  selectedCategory: _selectedCategory,
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryFilter() {
-    return Container(
-      height: 60,
-      color: Colors.white,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        itemCount: _categories.length,
-        itemBuilder: (context, index) {
-          final cat = _categories[index];
-          final isSelected = _selectedCategory == cat;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: FilterChip(
-              label: Text(cat, style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-              selected: isSelected,
-              onSelected: (selected) {
-                setState(() {
-                  _selectedCategory = cat;
-                });
-              },
-              selectedColor: Colors.green.shade100,
-              checkmarkColor: Colors.green,
-              backgroundColor: Colors.grey[100],
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            ),
-          );
+          final userLocation = LatLng(snapshot.data!.latitude, snapshot.data!.longitude);
+          return ProductMap(userLocation: userLocation);
         },
       ),
     );
@@ -162,13 +108,8 @@ class _MapPageState extends State<MapPage> {
 
 class ProductMap extends StatefulWidget {
   final LatLng userLocation;
-  final String selectedCategory;
-  
-  const ProductMap({
-    super.key, 
-    required this.userLocation,
-    required this.selectedCategory,
-  });
+
+  const ProductMap({super.key, required this.userLocation});
 
   @override
   State<ProductMap> createState() => _ProductMapState();
@@ -182,16 +123,6 @@ class _ProductMapState extends State<ProductMap> {
   void initState() {
     super.initState();
     _productsFuture = _getProductsForMap();
-  }
-
-  @override
-  void didUpdateWidget(ProductMap oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedCategory != widget.selectedCategory) {
-      // Re-fetch or re-filter products when category changes
-      // In this case, we re-fetch to keep it simple, but filtering locally is also possible
-      _productsFuture = _getProductsForMap();
-    }
   }
 
   Future<List<Map<String, dynamic>>> _getProductsForMap() async {
@@ -243,9 +174,9 @@ class _ProductMapState extends State<ProductMap> {
                   child: ListTile(
                     leading: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: imagePath.isNotEmpty 
-                        ? SupabaseImage(imagePath: imagePath, width: 56, height: 56)
-                        : Container(width: 56, height: 56, color: Colors.grey[200], child: const Icon(Icons.image)),
+                      child: imagePath.isNotEmpty
+                          ? SupabaseImage(imagePath: imagePath, width: 56, height: 56)
+                          : Container(width: 56, height: 56, color: Colors.grey[200], child: const Icon(Icons.image)),
                     ),
                     title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Column(
@@ -289,9 +220,9 @@ class _ProductMapState extends State<ProductMap> {
                 border: Border.all(color: Colors.green, width: 2),
               ),
               child: ClipOval(
-                child: imagePath.isNotEmpty 
-                  ? SupabaseImage(imagePath: imagePath, width: 40, height: 40)
-                  : const Icon(Icons.person, color: Colors.grey),
+                child: imagePath.isNotEmpty
+                    ? SupabaseImage(imagePath: imagePath, width: 40, height: 40)
+                    : const Icon(Icons.person, color: Colors.grey),
               ),
             ),
           ],
@@ -308,14 +239,7 @@ class _ProductMapState extends State<ProductMap> {
           future: _productsFuture,
           builder: (context, snapshot) {
             final allProducts = snapshot.data ?? [];
-            
-            // Apply category filtering
-            final filteredProducts = allProducts.where((p) {
-              if (widget.selectedCategory == 'All') return true;
-              return p['category'] == widget.selectedCategory;
-            }).toList();
-
-            final productMarkers = filteredProducts.map((product) => _createProductMarker(context, product)).toList();
+            final productMarkers = allProducts.map((product) => _createProductMarker(context, product)).toList();
 
             return FlutterMap(
               mapController: _mapController,
@@ -326,7 +250,7 @@ class _ProductMapState extends State<ProductMap> {
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.geo_connect.app',
+                  userAgentPackageName: 'com.example.untitled1',
                 ),
                 MarkerLayer(markers: productMarkers),
                 MarkerLayer(

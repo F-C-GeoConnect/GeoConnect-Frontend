@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Import Supabase
 import '../../services/product_service.dart';
 
 class AddPage extends StatefulWidget {
@@ -68,7 +69,6 @@ class _AddPageState extends State<AddPage> {
   }
 
   Future<void> _postProduct() async {
-    // FIXED: Explicitly check if _selectedCategory is null before proceeding
     if (!_formKey.currentState!.validate() || _imageFile == null || _selectedCategory == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill all fields, select a category, and add an image.')),
@@ -87,21 +87,40 @@ class _AddPageState extends State<AddPage> {
 
       final locationString = 'POINT(${position.longitude} ${position.latitude})';
 
-      // Use the local _selectedCategory state variable
+      // 1. Post the product to the database
       await _productService.postProduct(
         name: _nameController.text.trim(),
         price: double.tryParse(_priceController.text) ?? 0.0,
         description: _descriptionController.text.trim(),
         imageUrl: imageUrl,
-        category: _selectedCategory!, // Passing the selected category
+        category: _selectedCategory!, 
         unit: _selectedUnit,
         totalQuantity: double.tryParse(_totalQuantityController.text) ?? 0.0,
         locationString: locationString,
       );
 
+      // 2. TRIGGER NOTIFICATION: Call the Supabase Edge Function
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        await Supabase.instance.client.functions.invoke(
+          'send-push',
+          body: {
+            'product_name': _nameController.text.trim(),
+            'seller_name': user?.userMetadata?['full_name'] ?? 'A farmer',
+            'lat': position.latitude,
+            'lon': position.longitude,
+            'seller_id': user?.id,
+          },
+        );
+        debugPrint('Notification trigger sent to Edge Function');
+      } catch (fError) {
+        debugPrint('Edge Function call failed (Notification might not send): $fError');
+        // We don't throw here so the user still sees their product was posted
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Product posted successfully!')),
+          const SnackBar(content: Text('Product posted successfully! Nearby users will be notified.')),
         );
         _clearForm();
       }
@@ -129,7 +148,7 @@ class _AddPageState extends State<AddPage> {
     setState(() {
       _imageFile = null;
       _selectedUnit = 'per kg';
-      _selectedCategory = null; // Reset category selection
+      _selectedCategory = null;
     });
   }
 

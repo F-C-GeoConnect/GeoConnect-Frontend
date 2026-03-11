@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'orders_history_screen.dart';
 import '../../widgets/supabase_image.dart';
+import '../../services/product_service.dart';
 
 class ListingPage extends StatefulWidget {
   const ListingPage({super.key});
@@ -68,7 +69,7 @@ class _ListingPageState extends State<ListingPage> {
 
       if (imageUrl != null && imageUrl.isNotEmpty) {
         try {
-          final fileName = imageUrl.contains('/') ? imageUrl.split('/').last : imageUrl;
+          final fileName = ProductService.getStoragePath(imageUrl);
           await _supabase.storage.from('product_images').remove([fileName]);
         } catch (storageError) {
           debugPrint('Storage deletion error: $storageError');
@@ -173,6 +174,9 @@ class _ListingPageState extends State<ListingPage> {
           itemBuilder: (context, index) {
             final product = products[index];
             final quantity = (product['total_quantity'] ?? 0) as num;
+            
+            // Clean up image path using ProductService helper
+            final imagePath = ProductService.getStoragePath(product['imageUrl']);
 
             return Card(
               margin: const EdgeInsets.symmetric(vertical: 8),
@@ -181,7 +185,7 @@ class _ListingPageState extends State<ListingPage> {
                 leading: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: SupabaseImage(
-                    imagePath: product['imageUrl'] ?? '',
+                    imagePath: imagePath,
                     width: 50,
                     height: 50,
                     fit: BoxFit.cover,

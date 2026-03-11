@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
+  flutter_launcher_icons: ^0.14.1
   cached_network_image: ^3.4.1
   supabase_flutter: ^2.5.3
   latlong2: ^0.9.1
@@ -48,9 +48,18 @@ flutter_native_splash:
     image: assets/DOOKO.png
     ios: true
 
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/crop.png"
+
 flutter:
   uses-material-design: true
   assets:
     - assets/app_banner.jpeg
     - assets/new_logowithGPS.jpeg
     - assets/farmers_market.jpeg
+    - assets/app_logo.jpeg
+    - assets/logo.png
+    - assets/final_logo.png
+    - assets/crop.png

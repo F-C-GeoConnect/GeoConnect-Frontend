@@ -5,7 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../login_screen.dart';
 import 'orders_history_screen.dart';
-import 'admin_panel.dart';
+import '../admin/admin_panel.dart';
+import '../verification/apply_verification_screen.dart'; // ← ADD THIS
 
 class MyAccount extends StatefulWidget {
   const MyAccount({super.key});
@@ -19,10 +20,10 @@ class _MyAccountState extends State<MyAccount> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
-  
+
   bool _isUploading = false;
   bool _isSaving = false;
-  
+
   late final Stream<Map<String, dynamic>?> _profileStream;
 
   @override
@@ -107,22 +108,22 @@ class _MyAccountState extends State<MyAccount> {
       };
 
       await _supabase.from('profiles').update(updates).eq('id', user.id);
-      
+
       await _supabase.auth.updateUser(UserAttributes(
-        data: {'full_name': _nameController.text.trim()}
+          data: {'full_name': _nameController.text.trim()}
       ));
 
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green)
+            const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green)
         );
       }
     } catch (e) {
       debugPrint('Update error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Update failed: $e'), backgroundColor: Colors.red)
+            SnackBar(content: Text('Update failed: $e'), backgroundColor: Colors.red)
         );
       }
     } finally {
@@ -158,12 +159,13 @@ class _MyAccountState extends State<MyAccount> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.green)));
         }
-        
+
         final profile = snapshot.data;
         if (profile == null) return const Scaffold(body: Center(child: Text('Profile not found')));
-        
-        final bool isAdmin = profile['is_admin'] ?? false;
-        final String phone = profile['phone'] ?? 'Not set';
+
+        final bool isAdmin    = profile['is_admin']    ?? false;
+        final bool isVerified = profile['is_verified'] ?? false; // ← ADD THIS
+        final String phone   = profile['phone']   ?? 'Not set';
         final String address = profile['address'] ?? 'Not set';
 
         return Scaffold(
@@ -193,8 +195,8 @@ class _MyAccountState extends State<MyAccount> {
                                   ? CachedNetworkImageProvider(profile['avatar_url'])
                                   : null,
                               child: (profile['avatar_url'] == null || profile['avatar_url'].toString().isEmpty)
-                                ? Text((profile['full_name'] ?? 'U')[0].toUpperCase(), style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.green.shade800))
-                                : null,
+                                  ? Text((profile['full_name'] ?? 'U')[0].toUpperCase(), style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.green.shade800))
+                                  : null,
                             ),
                             if (_isUploading)
                               const Positioned.fill(child: CircularProgressIndicator(color: Colors.green)),
@@ -213,14 +215,35 @@ class _MyAccountState extends State<MyAccount> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Text(profile['full_name'] ?? 'No Name', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                        Text(_supabase.auth.currentUser?.email ?? '', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                        // ── Show verified badge under name ────────────────
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(profile['full_name'] ?? 'No Name',
+                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                            if (isVerified) ...[
+                              const SizedBox(width: 6),
+                              const Icon(Icons.verified, color: Colors.blue, size: 20),
+                            ],
+                          ],
+                        ),
+                        Text(_supabase.auth.currentUser?.email ?? '',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                        if (isVerified)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text('Verified Farmer',
+                                style: TextStyle(
+                                    color: Colors.green.shade600,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500)),
+                          ),
                       ],
                     ),
                   ),
                 ),
                 _buildStatsSection(),
-                
+
                 _buildSectionHeader('CONTACT INFORMATION'),
                 _buildInfoCard(
                   items: [
@@ -234,11 +257,58 @@ class _MyAccountState extends State<MyAccount> {
                   _buildSettingsItem(
                     icon: Icons.admin_panel_settings,
                     title: 'Admin Dashboard',
-                    subtitle: 'Manage products and users',
+                    subtitle: 'Manage products, users and verifications',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanel())),
                   ),
                 ],
-                
+
+                // ── VERIFICATION SECTION ─────────────────────────────────
+                if (!isAdmin) ...[
+                  _buildSectionHeader('SELLER VERIFICATION'),
+                  if (isVerified)
+                  // Already verified — show a static badge tile
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.verified, color: Colors.green, size: 22),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Verified Farmer',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green.shade800)),
+                              Text('Your seller account is verified.',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.green.shade600)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                  // Not verified — show apply button
+                    _buildSettingsItem(
+                      icon: Icons.verified_user_outlined,
+                      title: 'Apply for Verification',
+                      subtitle: 'Get a verified badge on your profile & products',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const ApplyVerificationScreen()),
+                      ),
+                    ),
+                ],
+                // ── END VERIFICATION SECTION ─────────────────────────────
+
                 _buildSectionHeader('ACCOUNT SETTINGS'),
                 _buildSettingsItem(
                   icon: Icons.person_outline,
@@ -377,74 +447,74 @@ class _MyAccountState extends State<MyAccount> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return Padding(
-            padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Edit Profile', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 24),
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      labelText: 'Full Name', 
-                      prefixIcon: const Icon(Icons.person_outline), 
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: InputDecoration(
-                      labelText: 'Phone Number', 
-                      prefixIcon: const Icon(Icons.phone_outlined), 
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _addressController,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      labelText: 'Default Address', 
-                      prefixIcon: const Icon(Icons.location_on_outlined), 
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity, height: 50,
-                    child: ElevatedButton(
-                      onPressed: _isSaving ? null : () async {
-                        setModalState(() => _isSaving = true);
-                        await _updateProfile();
-                        if (mounted) setModalState(() => _isSaving = false);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green, 
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 0,
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Edit Profile', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Full Name',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.grey[50],
                       ),
-                      child: _isSaving 
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text('Save Changes', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'Phone Number',
+                        prefixIcon: const Icon(Icons.phone_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _addressController,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        labelText: 'Default Address',
+                        prefixIcon: const Icon(Icons.location_on_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity, height: 50,
+                      child: ElevatedButton(
+                        onPressed: _isSaving ? null : () async {
+                          setModalState(() => _isSaving = true);
+                          await _updateProfile();
+                          if (mounted) setModalState(() => _isSaving = false);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        child: _isSaving
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Text('Save Changes', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }
+            );
+          }
       ),
     );
   }

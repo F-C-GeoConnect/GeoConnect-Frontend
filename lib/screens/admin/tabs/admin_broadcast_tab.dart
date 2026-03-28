@@ -197,7 +197,8 @@ class _AdminBroadcastTabState extends State<AdminBroadcastTab> {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _supabase
           .from('notifications')
-          .select()
+      // IMPROVED: Select only needed columns instead of * (reduces egress)
+          .select('id, title, message, created_at')
           .order('created_at', ascending: false)
           .limit(10),
       builder: (context, snapshot) {

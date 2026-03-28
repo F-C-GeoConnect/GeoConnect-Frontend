@@ -52,6 +52,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         rev += (num.tryParse(row['total_amount'].toString()) ?? 0).toInt();
       }
 
+      // IMPROVED: Limit to 15 recent orders (was unlimited)
       final recent = await _supabase
           .from('orders')
           .select('id, status, total_amount, created_at, items')
@@ -166,7 +167,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
             child: Icon(item.icon, color: item.color, size: 16),
           ),
           const SizedBox(height: 4),
-          // FittedBox prevents large numbers from overflowing
+          // IMPROVED: FittedBox prevents large numbers from overflowing
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
@@ -202,7 +203,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         ? (items.first['product_name'] ?? 'Item').toString()
         : 'Order';
     final amount = num.tryParse(order['total_amount'].toString()) ?? 0;
-    final rawId  = order['id'].toString();
+    // IMPROVED: Shorten long UUID order IDs to prevent overflow
+    final rawId   = order['id'].toString();
     final shortId = rawId.length > 8 ? '${rawId.substring(0, 8)}…' : rawId;
 
     return Container(

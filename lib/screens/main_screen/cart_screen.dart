@@ -21,7 +21,7 @@ class _CartScreenState extends State<CartScreen> {
   bool _isProcessing = false;
   String _paymentMethod = 'COD';
   late String _orderId;
-  
+
   final _addressController = TextEditingController();
   Position? _deliveryPosition;
   bool _isLocating = false;
@@ -50,7 +50,7 @@ class _CartScreenState extends State<CartScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      
+
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
         final position = await Geolocator.getCurrentPosition();
         setState(() {
@@ -73,7 +73,7 @@ class _CartScreenState extends State<CartScreen> {
     final user = supabase.auth.currentUser;
 
     if (user == null) return;
-    
+
     if (_addressController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a delivery address or pin your location.')));
       return;
@@ -86,11 +86,11 @@ class _CartScreenState extends State<CartScreen> {
 
       for (var item in itemsToOrder) {
         final productData = await supabase.from('products').select('total_quantity, seller_id, productName').eq('id', item.id).single();
-        
+
         if (productData['seller_id'] == user.id) {
           throw 'You cannot purchase your own product (${item.name}).';
         }
-        
+
         final currentStock = (productData['total_quantity'] as num).toDouble();
         if (currentStock < item.quantity) {
           throw 'Sorry, ${item.name} only has $currentStock units left.';
@@ -122,12 +122,12 @@ class _CartScreenState extends State<CartScreen> {
 
         final currentStock = (productData['total_quantity'] as num).toDouble();
         final newStock = currentStock - item.quantity;
-        
+
         if (newStock <= 0) {
           await supabase.from('products').delete().eq('id', item.id);
         } else {
           await supabase.from('products').update(
-            {'total_quantity': newStock}
+              {'total_quantity': newStock}
           ).eq('id', item.id);
         }
       }
@@ -160,7 +160,7 @@ class _CartScreenState extends State<CartScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Checkout failed: $e'), backgroundColor: Colors.red));
+            content: Text('Checkout failed: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -189,7 +189,12 @@ class _CartScreenState extends State<CartScreen> {
 
   void _navigateToProduct(int productId) async {
     try {
-      final data = await Supabase.instance.client.from('products').select().eq('id', productId).single();
+      // OPTIMIZED: Select only needed columns
+      final data = await Supabase.instance.client
+          .from('products')
+          .select('id, productName, price, imageUrl, seller_id, location, latitude, longitude, category, description, total_quantity, sellerName, created_at')
+          .eq('id', productId)
+          .single();
       if (mounted) {
         Navigator.push(context, MaterialPageRoute(builder: (context) => ProductProfilePage(product: data)));
       }
@@ -201,12 +206,12 @@ class _CartScreenState extends State<CartScreen> {
   @override
   Widget build(BuildContext context) {
     final cart = Provider.of<CartProvider>(context);
-    final List<CartItem> displayItems = widget.directItem != null 
-        ? [widget.directItem!] 
+    final List<CartItem> displayItems = widget.directItem != null
+        ? [widget.directItem!]
         : cart.items.values.toList();
-    
-    final double totalAmount = widget.directItem != null 
-        ? widget.directItem!.price * widget.directItem!.quantity 
+
+    final double totalAmount = widget.directItem != null
+        ? widget.directItem!.price * widget.directItem!.quantity
         : cart.totalAmount;
 
     final colorScheme = Theme.of(context).colorScheme;
@@ -214,7 +219,7 @@ class _CartScreenState extends State<CartScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(widget.directItem != null ? "Checkout" : "My Cart", 
+        title: Text(widget.directItem != null ? "Checkout" : "My Cart",
             style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -223,20 +228,20 @@ class _CartScreenState extends State<CartScreen> {
       body: displayItems.isEmpty
           ? _buildEmptyCart(colorScheme)
           : Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 24),
               children: [
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    children: [
-                      _buildCartList(displayItems, cart, colorScheme),
-                      _buildShippingInfo(colorScheme),
-                      _buildPaymentSelection(colorScheme),
-                    ],
-                  ),
-                ),
-                _buildBottomSummary(totalAmount, colorScheme, displayItems),
+                _buildCartList(displayItems, cart, colorScheme),
+                _buildShippingInfo(colorScheme),
+                _buildPaymentSelection(colorScheme),
               ],
             ),
+          ),
+          _buildBottomSummary(totalAmount, colorScheme, displayItems),
+        ],
+      ),
     );
   }
 
@@ -291,7 +296,7 @@ class _CartScreenState extends State<CartScreen> {
       itemCount: items.length,
       itemBuilder: (ctx, i) {
         final item = items[i];
-        
+
         String imagePath = item.image;
         if (item.image.contains('product_images/')) {
           imagePath = item.image.split('product_images/').last;
@@ -313,20 +318,20 @@ class _CartScreenState extends State<CartScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: (imagePath.isNotEmpty) 
+                    child: (imagePath.isNotEmpty)
                         ? SupabaseImage(
-                            imagePath: imagePath, 
-                            width: 80, 
-                            height: 80, 
-                            fit: BoxFit.cover,
-                            bucket: 'product_images',
-                          )
+                      imagePath: imagePath,
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                      bucket: 'product_images',
+                    )
                         : Container(
-                            width: 80, 
-                            height: 80, 
-                            color: Colors.grey[100],
-                            child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                          ),
+                      width: 80,
+                      height: 80,
+                      color: Colors.grey[100],
+                      child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -338,46 +343,46 @@ class _CartScreenState extends State<CartScreen> {
                         Text(_currencyFormat.format(item.price), style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         if (widget.directItem == null)
-                        Row(
-                          children: [
-                            _buildQtyBtn(Icons.remove, () => cart.decrementItem(item.id), colorScheme),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                              child: Text('${item.quantity}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                            ),
-                            _buildQtyBtn(Icons.add, () => cart.incrementItem(item.id), colorScheme),
-                          ],
-                        )
+                          Row(
+                            children: [
+                              _buildQtyBtn(Icons.remove, () => cart.decrementItem(item.id), colorScheme),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                                child: Text('${item.quantity}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                              ),
+                              _buildQtyBtn(Icons.add, () => cart.incrementItem(item.id), colorScheme),
+                            ],
+                          )
                         else
-                        Text("Quantity: ${item.quantity}", style: const TextStyle(fontWeight: FontWeight.w500)),
+                          Text("Quantity: ${item.quantity}", style: const TextStyle(fontWeight: FontWeight.w500)),
                       ],
                     ),
                   ),
                   if (widget.directItem == null)
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextButton.icon(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          icon: Icon(Icons.shopping_bag_outlined, size: 20, color: colorScheme.primary),
+                          label: Text("BUY", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.primary)),
+                          onPressed: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => CartScreen(directItem: item)));
+                          },
                         ),
-                        icon: Icon(Icons.shopping_bag_outlined, size: 20, color: colorScheme.primary),
-                        label: Text("BUY", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.primary)),
-                        onPressed: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => CartScreen(directItem: item)));
-                        },
-                      ),
-                      const SizedBox(height: 4),
-                      IconButton(
-                        constraints: const BoxConstraints(),
-                        padding: const EdgeInsets.all(4),
-                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 22),
-                        onPressed: () => _confirmDelete(context, cart, item.id),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(height: 4),
+                        IconButton(
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.all(4),
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 22),
+                          onPressed: () => _confirmDelete(context, cart, item.id),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -408,7 +413,7 @@ class _CartScreenState extends State<CartScreen> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white, 
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade200),
       ),
@@ -432,9 +437,9 @@ class _CartScreenState extends State<CartScreen> {
               filled: true,
               fillColor: Colors.grey[50],
               suffixIcon: IconButton(
-                icon: _isLocating 
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
-                  : Icon(Icons.my_location, color: colorScheme.primary),
+                icon: _isLocating
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(Icons.my_location, color: colorScheme.primary),
                 onPressed: _getCurrentLocation,
               ),
             ),
@@ -469,7 +474,7 @@ class _CartScreenState extends State<CartScreen> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white, 
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade200),
       ),

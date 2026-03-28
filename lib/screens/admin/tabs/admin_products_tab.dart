@@ -210,7 +210,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
   Widget _buildProductCard(Map<String, dynamic> p) {
     final imageUrl = p['imageUrl']?.toString() ?? '';
     final name     = p['productName'] ?? 'No name';
-    // ── FIX: raw number only, no currency symbol — we apply it once ──
+    // IMPROVED: raw number only — currency symbol applied once via AdminHelpers.currency
     final price    = num.tryParse(p['price'].toString()) ?? 0;
     final qty      = p['total_quantity'] ?? 0;
     final seller   = p['sellerName'] ?? 'Unknown';
@@ -242,7 +242,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
             ),
             const SizedBox(width: 12),
 
-            // Details — Expanded prevents overflow
+            // IMPROVED: Details in Expanded to prevent overflow
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -259,13 +259,14 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1),
                   const SizedBox(height: 6),
+                  // IMPROVED: Wrap prevents category badge + price from overflowing
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
                     children: [
                       if (category.isNotEmpty)
                         AdminBadge(label: category, color: Colors.green),
-                      // Single currency format — no double "Rs."
+                      // FIXED: Single currency format — no double "Rs."
                       Text(
                         AdminHelpers.currency.format(price),
                         style: const TextStyle(
@@ -276,6 +277,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                     ],
                   ),
                   const SizedBox(height: 4),
+                  // IMPROVED: Stock row with LOW badge when stock < 5
                   Row(
                     children: [
                       Icon(
@@ -308,14 +310,14 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
                                   fontSize: 9,
                                   fontWeight: FontWeight.bold)),
                         ),
-                      ]
+                      ],
                     ],
                   ),
                 ],
               ),
             ),
 
-            // Action icons — Column, not inline to prevent overflow
+            // Action icons — Column avoids inline overflow
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [

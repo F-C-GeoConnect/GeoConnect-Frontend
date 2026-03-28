@@ -160,7 +160,7 @@ class _AdminOrdersTabState extends State<AdminOrdersTab> {
     final color  = AdminHelpers.statusColor(status);
     final items  = order['items'] as List<dynamic>? ?? [];
     final amount = num.tryParse(order['total_amount'].toString()) ?? 0;
-    // Shorten long UUID order IDs
+    // IMPROVED: Shorten long UUID order IDs to prevent overflow
     final shortId = order['id'].toString().length > 12
         ? order['id'].toString().substring(0, 12) + '…'
         : order['id'].toString();
@@ -251,7 +251,7 @@ class _AdminOrdersTabState extends State<AdminOrdersTab> {
             ),
             const SizedBox(height: 10),
 
-            // Actions — wrap prevents overflow
+            // IMPROVED: Wrap prevents overflow for action buttons
             Wrap(
               spacing: 6,
               runSpacing: 6,

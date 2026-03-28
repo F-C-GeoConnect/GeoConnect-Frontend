@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../widgets/user_avatar.dart';
 import '../login_screen.dart';
 import 'orders_history_screen.dart';
 import '../admin/admin_panel.dart';
-import '../verification/apply_verification_screen.dart'; // ← ADD THIS
 
 class MyAccount extends StatefulWidget {
   const MyAccount({super.key});
@@ -81,6 +81,8 @@ class _MyAccountState extends State<MyAccount> {
       final imageUrl = _supabase.storage.from('avatars').getPublicUrl(filePath);
 
       await _supabase.from('profiles').update({'avatar_url': imageUrl}).eq('id', user.id);
+
+      // Update local metadata as well
       await _supabase.auth.updateUser(UserAttributes(data: {'avatar_url': imageUrl}));
 
       if (mounted) {
@@ -163,9 +165,8 @@ class _MyAccountState extends State<MyAccount> {
         final profile = snapshot.data;
         if (profile == null) return const Scaffold(body: Center(child: Text('Profile not found')));
 
-        final bool isAdmin    = profile['is_admin']    ?? false;
-        final bool isVerified = profile['is_verified'] ?? false; // ← ADD THIS
-        final String phone   = profile['phone']   ?? 'Not set';
+        final bool isAdmin = profile['is_admin'] ?? false;
+        final String phone = profile['phone'] ?? 'Not set';
         final String address = profile['address'] ?? 'Not set';
 
         return Scaffold(
@@ -188,15 +189,10 @@ class _MyAccountState extends State<MyAccount> {
                       children: [
                         Stack(
                           children: [
-                            CircleAvatar(
+                            UserAvatar(
+                              avatarUrl: profile['avatar_url'],
+                              name: profile['full_name'] ?? 'User',
                               radius: 55,
-                              backgroundColor: Colors.green.shade50,
-                              backgroundImage: (profile['avatar_url'] != null && profile['avatar_url'].toString().isNotEmpty)
-                                  ? CachedNetworkImageProvider(profile['avatar_url'])
-                                  : null,
-                              child: (profile['avatar_url'] == null || profile['avatar_url'].toString().isEmpty)
-                                  ? Text((profile['full_name'] ?? 'U')[0].toUpperCase(), style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.green.shade800))
-                                  : null,
                             ),
                             if (_isUploading)
                               const Positioned.fill(child: CircularProgressIndicator(color: Colors.green)),
@@ -215,29 +211,8 @@ class _MyAccountState extends State<MyAccount> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        // ── Show verified badge under name ────────────────
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(profile['full_name'] ?? 'No Name',
-                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                            if (isVerified) ...[
-                              const SizedBox(width: 6),
-                              const Icon(Icons.verified, color: Colors.blue, size: 20),
-                            ],
-                          ],
-                        ),
-                        Text(_supabase.auth.currentUser?.email ?? '',
-                            style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                        if (isVerified)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text('Verified Farmer',
-                                style: TextStyle(
-                                    color: Colors.green.shade600,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500)),
-                          ),
+                        Text(profile['full_name'] ?? 'No Name', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                        Text(_supabase.auth.currentUser?.email ?? '', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
                       ],
                     ),
                   ),
@@ -257,57 +232,10 @@ class _MyAccountState extends State<MyAccount> {
                   _buildSettingsItem(
                     icon: Icons.admin_panel_settings,
                     title: 'Admin Dashboard',
-                    subtitle: 'Manage products, users and verifications',
+                    subtitle: 'Manage products and users',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanel())),
                   ),
                 ],
-
-                // ── VERIFICATION SECTION ─────────────────────────────────
-                if (!isAdmin) ...[
-                  _buildSectionHeader('SELLER VERIFICATION'),
-                  if (isVerified)
-                  // Already verified — show a static badge tile
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.verified, color: Colors.green, size: 22),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Verified Farmer',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green.shade800)),
-                              Text('Your seller account is verified.',
-                                  style: TextStyle(
-                                      fontSize: 12, color: Colors.green.shade600)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                  // Not verified — show apply button
-                    _buildSettingsItem(
-                      icon: Icons.verified_user_outlined,
-                      title: 'Apply for Verification',
-                      subtitle: 'Get a verified badge on your profile & products',
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const ApplyVerificationScreen()),
-                      ),
-                    ),
-                ],
-                // ── END VERIFICATION SECTION ─────────────────────────────
 
                 _buildSectionHeader('ACCOUNT SETTINGS'),
                 _buildSettingsItem(
@@ -436,7 +364,7 @@ class _MyAccountState extends State<MyAccount> {
         onPressed: onTap,
         icon: Icon(icon, color: color, size: 20),
         label: Text(text, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
-        style: OutlinedButton.styleFrom(side: BorderSide(color: color.withValues(alpha: 0.5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+        style: OutlinedButton.styleFrom(side: BorderSide(color: color.withOpacity(0.5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
       ),
     );
   }
@@ -491,23 +419,21 @@ class _MyAccountState extends State<MyAccount> {
                         fillColor: Colors.grey[50],
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 32),
                     SizedBox(
-                      width: double.infinity, height: 50,
+                      width: double.infinity,
+                      height: 54,
                       child: ElevatedButton(
-                        onPressed: _isSaving ? null : () async {
-                          setModalState(() => _isSaving = true);
-                          await _updateProfile();
-                          if (mounted) setModalState(() => _isSaving = false);
-                        },
+                        onPressed: _isSaving ? null : _updateProfile,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           elevation: 0,
                         ),
                         child: _isSaving
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Text('Save Changes', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : const Text('Save Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],

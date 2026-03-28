@@ -194,7 +194,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
     final String userId   = u['id'];
     final String name     = u['full_name'] ?? 'No Name';
     final String avatar   = u['avatar_url'] ?? '';
-    // ── FIX: display address as location hint, phone separately ─────
+    // IMPROVED: display phone and address separately (was merged before)
     final String phone    = u['phone']   ?? '';
     final String address  = u['address'] ?? '';
     final bool isMe =
@@ -235,7 +235,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Name row with badges
+                      // IMPROVED: Wrap prevents name+badges from overflowing on small screens
                       Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
                         spacing: 6,
@@ -312,7 +312,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
             ),
             const SizedBox(height: 12),
 
-            // Action buttons — Wrap prevents overflow
+            // IMPROVED: Wrap prevents action buttons from overflowing
             Wrap(
               spacing: 8,
               runSpacing: 8,

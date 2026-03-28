@@ -1,3 +1,4 @@
+
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -15,12 +16,10 @@ class ProductService {
 
   Future<List<Map<String, dynamic>>> getProductsForHomepage({int offset = 0, int limit = 10}) async {
     try {
-      // Note: If the RPC 'get_products_for_homepage' doesn't support pagination,
-      // you might need to update the database function or use a standard query.
-      // For now, we'll try to use a standard query to support pagination and joins.
+      // OPTIMIZED: Selecting only necessary columns to reduce egress
       final response = await _supabase
           .from('products')
-          .select('*, profiles:seller_id(is_verified)')
+          .select('id, productName, price, imageUrl, seller_id, location, latitude, longitude, category, profiles:seller_id(is_verified)')
           .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
 

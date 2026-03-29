@@ -13,6 +13,7 @@ class AdminDashboardTab extends StatefulWidget {
 
 class _AdminDashboardTabState extends State<AdminDashboardTab> {
   final _supabase = Supabase.instance.client;
+  static const _dashboardCacheKey = 'admin.dashboard.summary';
 
   int _totalUsers           = 0;
   int _totalProducts        = 0;
@@ -30,45 +31,62 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() => _loading = true);
     try {
-      final results = await Future.wait([
-        _supabase.from('profiles').count(),
-        _supabase.from('products').count(),
-        _supabase.from('orders').count(),
-        _supabase.from('orders').count().eq('status', 'pending'),
-        _supabase.from('profiles').count().eq('is_banned', true),
-        _supabase.from('verification_requests').count().eq('status', 'pending'),
-      ]);
+      final payload = await AdminHelpers.cachedLoad<Map<String, dynamic>>(
+        _dashboardCacheKey,
+            () async {
+          final results = await Future.wait([
+            _supabase.from('profiles').count(),
+            _supabase.from('products').count(),
+            _supabase.from('orders').count(),
+            _supabase.from('orders').count().eq('status', 'pending'),
+            _supabase.from('profiles').count().eq('is_banned', true),
+            _supabase.from('verification_requests').count().eq('status', 'pending'),
+          ]);
 
-      final revenueRows = await _supabase
-          .from('orders')
-          .select('total_amount')
-          .eq('status', 'completed');
+          final revenueRows = await _supabase
+              .from('orders')
+              .select('total_amount')
+              .eq('status', 'completed');
 
-      int rev = 0;
-      for (final row in revenueRows as List) {
-        rev += (num.tryParse(row['total_amount'].toString()) ?? 0).toInt();
-      }
+          int rev = 0;
+          for (final row in revenueRows as List) {
+            rev += (num.tryParse(row['total_amount'].toString()) ?? 0).toInt();
+          }
 
-      // IMPROVED: Limit to 15 recent orders (was unlimited)
-      final recent = await _supabase
-          .from('orders')
-          .select('id, status, total_amount, created_at, items')
-          .order('created_at', ascending: false)
-          .limit(15);
+          final recent = await _supabase
+              .from('orders')
+              .select('id, status, total_amount, created_at, items')
+              .order('created_at', ascending: false)
+              .limit(15);
+
+          return {
+            'users': results[0],
+            'products': results[1],
+            'orders': results[2],
+            'pendingOrders': results[3],
+            'bannedUsers': results[4],
+            'pendingVerifications': results[5],
+            'revenue': rev,
+            'recent': List<Map<String, dynamic>>.from(recent),
+          };
+        },
+        ttl: const Duration(seconds: 30),
+        forceRefresh: forceRefresh,
+      );
 
       if (mounted) {
         setState(() {
-          _totalUsers           = results[0];
-          _totalProducts        = results[1];
-          _totalOrders          = results[2];
-          _pendingOrders        = results[3];
-          _bannedUsers          = results[4];
-          _pendingVerifications = results[5];
-          _totalRevenue         = rev;
-          _recentOrders         = List<Map<String, dynamic>>.from(recent);
+          _totalUsers           = payload['users'] as int;
+          _totalProducts        = payload['products'] as int;
+          _totalOrders          = payload['orders'] as int;
+          _pendingOrders        = payload['pendingOrders'] as int;
+          _bannedUsers          = payload['bannedUsers'] as int;
+          _pendingVerifications = payload['pendingVerifications'] as int;
+          _totalRevenue         = payload['revenue'] as int;
+          _recentOrders         = payload['recent'] as List<Map<String, dynamic>>;
           _loading              = false;
         });
       }
@@ -81,7 +99,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [

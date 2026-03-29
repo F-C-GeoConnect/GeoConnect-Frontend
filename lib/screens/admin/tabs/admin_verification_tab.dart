@@ -17,9 +17,16 @@ class AdminVerificationTab extends StatefulWidget {
 
 class _AdminVerificationTabState extends State<AdminVerificationTab> {
   final _supabase   = Supabase.instance.client;
+  static const _verificationDocsBucket = 'verification_docs';
+  static const _verificationCachePrefix = 'admin.verification.';
   String _filter    = 'pending';
   List<Map<String, dynamic>> _requests = [];
   bool _loading     = true;
+  final Map<String, String> _docUrlCache = {};
+
+  static const _requestSelect =
+      'id, user_id, full_name, phone, address, farm_name, farm_size, note, '
+      'doc_identity_url, doc_land_url, doc_selfie_url, status, admin_note, created_at';
 
   @override
   void initState() {
@@ -27,21 +34,24 @@ class _AdminVerificationTabState extends State<AdminVerificationTab> {
     _fetch();
   }
 
-  Future<void> _fetch() async {
+  Future<void> _fetch({bool forceRefresh = false}) async {
     setState(() => _loading = true);
     try {
-      // .eq() must come before .order() — it lives on PostgrestFilterBuilder,
-      // not on PostgrestTransformBuilder which .order() returns.
-      final data = _filter == 'all'
-          ? await _supabase
-          .from('verification_requests')
-          .select()
-          .order('created_at', ascending: false)
-          : await _supabase
-          .from('verification_requests')
-          .select()
-          .eq('status', _filter)
-          .order('created_at', ascending: false);
+      final data = await AdminHelpers.cachedLoad<List<dynamic>>(
+        '$_verificationCachePrefix$_filter',
+        () => _filter == 'all'
+            ? _supabase
+                .from('verification_requests')
+                .select(_requestSelect)
+                .order('created_at', ascending: false)
+            : _supabase
+                .from('verification_requests')
+                .select(_requestSelect)
+                .eq('status', _filter)
+                .order('created_at', ascending: false),
+        ttl: const Duration(seconds: 30),
+        forceRefresh: forceRefresh,
+      );
       if (mounted) {
         setState(() {
           _requests = List<Map<String, dynamic>>.from(data);
@@ -90,9 +100,13 @@ class _AdminVerificationTabState extends State<AdminVerificationTab> {
       });
 
       AdminHelpers.showSnack(context, 'User verified successfully!');
-      _fetch();
+      AdminHelpers.invalidateCachePrefix(_verificationCachePrefix);
+      AdminHelpers.invalidateCache('admin.users.list');
+      AdminHelpers.invalidateCache('admin.dashboard.summary');
+      _fetch(forceRefresh: true);
     } catch (e) {
-      AdminHelpers.showSnack(context, 'Error: $e', error: true);
+      AdminHelpers.showError(context, e,
+          fallback: 'Unable to approve this request.');
     }
   }
 
@@ -161,9 +175,12 @@ class _AdminVerificationTabState extends State<AdminVerificationTab> {
       });
 
       AdminHelpers.showSnack(context, 'Application rejected.');
-      _fetch();
+      AdminHelpers.invalidateCachePrefix(_verificationCachePrefix);
+      AdminHelpers.invalidateCache('admin.dashboard.summary');
+      _fetch(forceRefresh: true);
     } catch (e) {
-      AdminHelpers.showSnack(context, 'Error: $e', error: true);
+      AdminHelpers.showError(context, e,
+          fallback: 'Unable to reject this request.');
     }
   }
 
@@ -216,7 +233,7 @@ class _AdminVerificationTabState extends State<AdminVerificationTab> {
                   : 'No $_filter applications',
               icon: Icons.verified_user_outlined)
               : RefreshIndicator(
-            onRefresh: _fetch,
+            onRefresh: () => _fetch(forceRefresh: true),
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
               itemCount: _requests.length,
@@ -450,59 +467,88 @@ class _AdminVerificationTabState extends State<AdminVerificationTab> {
     );
   }
 
-  void _viewDocument(String url, String label) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape:
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(label,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 16)),
-                  IconButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    icon: const Icon(Icons.close),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-            ),
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(16)),
-              child: CachedNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.contain,
-                placeholder: (_, __) => const Padding(
-                  padding: EdgeInsets.all(40),
-                  child: CircularProgressIndicator(),
-                ),
-                errorWidget: (_, __, ___) => const Padding(
-                  padding: EdgeInsets.all(40),
-                  child: Column(
-                    children: [
-                      Icon(Icons.broken_image,
-                          size: 48, color: Colors.grey),
-                      SizedBox(height: 8),
-                      Text('Could not load image',
-                          style: TextStyle(color: Colors.grey)),
-                    ],
-                  ),
+  Future<String> _resolveDocumentUrl(String storedValue) async {
+    final value = storedValue.trim();
+    final cachedUrl = _docUrlCache[value];
+    if (cachedUrl != null) return cachedUrl;
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      _docUrlCache[value] = value;
+      return value;
+    }
+    final signed = await _supabase.storage
+        .from(_verificationDocsBucket)
+        .createSignedUrl(value, 60 * 5);
+    _docUrlCache[value] = signed;
+    return signed;
+  }
+
+  Future<void> _viewDocument(String value, String label) async {
+    try {
+      final imageUrl = await _resolveDocumentUrl(value);
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(label,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(16)),
+                child: CachedNetworkImage(
+                  imageUrl: imageUrl,
+                  cacheKey: value,
+                  fit: BoxFit.contain,
+                  placeholder: (_, __) => const Padding(
+                    padding: EdgeInsets.all(40),
+                    child: CircularProgressIndicator(),
+                  ),
+                  errorWidget: (_, __, ___) => const Padding(
+                    padding: EdgeInsets.all(40),
+                    child: Column(
+                      children: [
+                        Icon(Icons.broken_image,
+                            size: 48, color: Colors.grey),
+                        SizedBox(height: 8),
+                        Text('Could not load image',
+                            style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AdminHelpers.showError(context, e,
+          fallback: 'Unable to open this document.');
+    }
   }
 }
+
+
+
+
+

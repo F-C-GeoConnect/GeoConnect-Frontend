@@ -12,6 +12,8 @@ class AdminOrdersTab extends StatefulWidget {
 
 class _AdminOrdersTabState extends State<AdminOrdersTab> {
   final _supabase = Supabase.instance.client;
+  static const _ordersCachePrefix = 'admin.orders.';
+  static const _ordersCacheKey = 'admin.orders.list';
   String _statusFilter = 'all';
   List<Map<String, dynamic>> _orders = [];
   bool _loading = true;
@@ -27,13 +29,18 @@ class _AdminOrdersTabState extends State<AdminOrdersTab> {
     _fetchOrders();
   }
 
-  Future<void> _fetchOrders() async {
+  Future<void> _fetchOrders({bool forceRefresh = false}) async {
     setState(() => _loading = true);
     try {
-      final data = await _supabase
-          .from('orders')
-          .select('*, items')
-          .order('created_at', ascending: false);
+      final data = await AdminHelpers.cachedLoad<List<dynamic>>(
+        _ordersCacheKey,
+            () => _supabase
+            .from('orders')
+            .select('id, status, created_at, total_amount, payment_method, delivery_address, items')
+            .order('created_at', ascending: false),
+        ttl: const Duration(seconds: 25),
+        forceRefresh: forceRefresh,
+      );
       if (mounted) {
         setState(() {
           _orders  = List<Map<String, dynamic>>.from(data);
@@ -58,9 +65,12 @@ class _AdminOrdersTabState extends State<AdminOrdersTab> {
           .update({'status': newStatus})
           .eq('id', orderId);
       AdminHelpers.showSnack(context, 'Order updated to $newStatus.');
-      _fetchOrders();
+      AdminHelpers.invalidateCachePrefix(_ordersCachePrefix);
+      AdminHelpers.invalidateCache('admin.dashboard.summary');
+      _fetchOrders(forceRefresh: true);
     } catch (e) {
-      AdminHelpers.showSnack(context, 'Error: $e', error: true);
+      AdminHelpers.showError(context, e,
+          fallback: 'Unable to update order status.');
     }
   }
 
@@ -73,12 +83,39 @@ class _AdminOrdersTabState extends State<AdminOrdersTab> {
       confirmColor: Colors.red,
     );
     if (!ok) return;
+
+    final previousOrders = List<Map<String, dynamic>>.from(_orders);
+    if (mounted) {
+      // Optimistic UI: remove immediately so the card disappears right away.
+      setState(() {
+        _orders.removeWhere((o) => o['id'].toString() == orderId.toString());
+      });
+    }
+
     try {
-      await _supabase.from('orders').delete().eq('id', orderId);
-      AdminHelpers.showSnack(context, 'Order deleted.');
-      _fetchOrders();
+      final deletedRows = await _supabase
+          .from('orders')
+          .delete()
+          .eq('id', orderId)
+          .select('id');
+
+      if (deletedRows.isEmpty) {
+        throw Exception('Delete did not persist (row not found or permission denied).');
+      }
+
+      if (mounted) {
+        AdminHelpers.showSnack(context, 'Order deleted.');
+      }
+      AdminHelpers.invalidateCachePrefix(_ordersCachePrefix);
+      AdminHelpers.invalidateCache('admin.dashboard.summary');
+      await _fetchOrders(forceRefresh: true);
     } catch (e) {
-      AdminHelpers.showSnack(context, 'Error: $e', error: true);
+      if (mounted) {
+        // Roll back optimistic remove if backend delete fails.
+        setState(() => _orders = previousOrders);
+        AdminHelpers.showError(context, e,
+            fallback: 'Unable to delete order.');
+      }
     }
   }
 
@@ -142,7 +179,7 @@ class _AdminOrdersTabState extends State<AdminOrdersTab> {
               message: 'No orders found',
               icon: Icons.receipt_long)
               : RefreshIndicator(
-            onRefresh: _fetchOrders,
+            onRefresh: () => _fetchOrders(forceRefresh: true),
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
               itemCount: _filtered.length,
@@ -470,3 +507,4 @@ class _AdminOrdersTabState extends State<AdminOrdersTab> {
     );
   }
 }
+

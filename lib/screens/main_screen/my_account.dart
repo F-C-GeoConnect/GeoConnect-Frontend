@@ -7,6 +7,7 @@ import '../../widgets/user_avatar.dart';
 import '../login_screen.dart';
 import 'orders_history_screen.dart';
 import '../admin/admin_panel.dart';
+import '../verification/apply_verification_screen.dart';
 
 class MyAccount extends StatefulWidget {
   const MyAccount({super.key});
@@ -166,6 +167,7 @@ class _MyAccountState extends State<MyAccount> {
         if (profile == null) return const Scaffold(body: Center(child: Text('Profile not found')));
 
         final bool isAdmin = profile['is_admin'] ?? false;
+        final bool isVerified = profile['is_verified'] ?? false;
         final String phone = profile['phone'] ?? 'Not set';
         final String address = profile['address'] ?? 'Not set';
 
@@ -211,7 +213,23 @@ class _MyAccountState extends State<MyAccount> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Text(profile['full_name'] ?? 'No Name', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                        if (isVerified)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                profile['full_name'] ?? 'No Name',
+                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.verified, color: Colors.blue, size: 20),
+                            ],
+                          )
+                        else
+                          Text(
+                            profile['full_name'] ?? 'No Name',
+                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                          ),
                         Text(_supabase.auth.currentUser?.email ?? '', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
                       ],
                     ),
@@ -238,6 +256,18 @@ class _MyAccountState extends State<MyAccount> {
                 ],
 
                 _buildSectionHeader('ACCOUNT SETTINGS'),
+                if (!isVerified)
+                  _buildSettingsItem(
+                    icon: Icons.verified_user_outlined,
+                    title: 'Apply for Verification',
+                    subtitle: 'Submit documents for admin approval',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ApplyVerificationScreen(),
+                      ),
+                    ),
+                  ),
                 _buildSettingsItem(
                   icon: Icons.person_outline,
                   title: 'Edit Personal Info',

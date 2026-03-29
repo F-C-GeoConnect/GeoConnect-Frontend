@@ -18,6 +18,7 @@ class ApplyVerificationScreen extends StatefulWidget {
 
 class _ApplyVerificationScreenState extends State<ApplyVerificationScreen> {
   final _supabase    = Supabase.instance.client;
+  static const _verificationDocsBucket = 'verification_docs';
   final _formKey     = GlobalKey<FormState>();
   final _picker      = ImagePicker();
 
@@ -101,15 +102,38 @@ class _ApplyVerificationScreenState extends State<ApplyVerificationScreen> {
     });
   }
 
+  String? _optionalText(String value) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
   Future<String?> _uploadDoc(File file, String label) async {
     final userId  = _supabase.auth.currentUser!.id;
     final ext     = file.path.split('.').last;
     final path    = '$userId/${label}_${DateTime.now().millisecondsSinceEpoch}.$ext';
-    await _supabase.storage.from('verification_docs').upload(path, file);
-    // Return a signed URL valid for 10 years (for admin preview)
-    return _supabase.storage
-        .from('verification_docs')
-        .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+    try {
+      await _supabase.storage.from(_verificationDocsBucket).upload(path, file);
+      // Store object path, not a long-lived signed URL.
+      return path;
+    } on StorageException catch (e) {
+      if ((e.statusCode == '404') ||
+          (e.message.toLowerCase().contains('bucket not found'))) {
+        throw Exception(
+          'Verification upload is not configured yet. Please create a storage bucket named "$_verificationDocsBucket".',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  String _friendlySubmitError(Object error) {
+    if (error is PostgrestException) {
+      return 'Could not submit your application. Please try again shortly.';
+    }
+    if (error is StorageException) {
+      return 'Document upload failed. Please try again.';
+    }
+    return error.toString();
   }
 
   Future<void> _submit() async {
@@ -132,9 +156,9 @@ class _ApplyVerificationScreenState extends State<ApplyVerificationScreen> {
         'full_name':        _nameCtrl.text.trim(),
         'phone':            _phoneCtrl.text.trim(),
         'address':          _addressCtrl.text.trim(),
-        'farm_name':        _farmCtrl.text.trim(),
-        'farm_size':        _sizeCtrl.text.trim(),
-        'note':             _noteCtrl.text.trim(),
+        'farm_name':        _optionalText(_farmCtrl.text),
+        'farm_size':        _optionalText(_sizeCtrl.text),
+        'note':             _optionalText(_noteCtrl.text),
         'doc_identity_url': identityUrl,
         'doc_land_url':     landUrl,
         'doc_selfie_url':   selfieUrl,
@@ -146,7 +170,8 @@ class _ApplyVerificationScreenState extends State<ApplyVerificationScreen> {
         _snack('Application submitted! Admin will review it shortly.');
       }
     } catch (e) {
-      _snack('Error: $e', error: true);
+      debugPrint('Verification submit error: $e');
+      _snack(_friendlySubmitError(e), error: true);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -214,7 +239,7 @@ class _ApplyVerificationScreenState extends State<ApplyVerificationScreen> {
                   _field(_farmCtrl, 'Farm / Business Name (optional)',
                       Icons.agriculture),
                   const SizedBox(height: 12),
-                  _field(_sizeCtrl, 'Farm Size (e.g. 2 ropani)',
+                  _field(_sizeCtrl, 'Farm Size (optional, e.g. 2 ropani)',
                       Icons.landscape),
                   const SizedBox(height: 20),
 

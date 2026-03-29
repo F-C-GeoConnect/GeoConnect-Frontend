@@ -14,10 +14,12 @@ class AdminBroadcastTab extends StatefulWidget {
 
 class _AdminBroadcastTabState extends State<AdminBroadcastTab> {
   final _supabase     = Supabase.instance.client;
+  static const _recentBroadcastCacheKey = 'admin.broadcast.recent';
   final _titleCtrl    = TextEditingController();
   final _messageCtrl  = TextEditingController();
   String _selectedType = 'general';
   bool _sending        = false;
+  late Future<List<Map<String, dynamic>>> _recentFuture;
 
   static const _types = [
     'general', 'order', 'delivery', 'selling', 'availability'
@@ -28,6 +30,28 @@ class _AdminBroadcastTabState extends State<AdminBroadcastTab> {
     _titleCtrl.dispose();
     _messageCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _recentFuture = _loadRecentNotifications();
+  }
+
+  Future<List<Map<String, dynamic>>> _loadRecentNotifications({bool forceRefresh = false}) {
+    return AdminHelpers.cachedLoad<List<Map<String, dynamic>>>(
+      _recentBroadcastCacheKey,
+      () async {
+        final rows = await _supabase
+            .from('notifications')
+            .select('id, title, message, created_at')
+            .order('created_at', ascending: false)
+            .limit(10);
+        return List<Map<String, dynamic>>.from(rows);
+      },
+      ttl: const Duration(seconds: 30),
+      forceRefresh: forceRefresh,
+    );
   }
 
   Future<void> _send() async {
@@ -73,11 +97,15 @@ class _AdminBroadcastTabState extends State<AdminBroadcastTab> {
             context, 'Broadcast sent to ${batch.length} users.');
         _titleCtrl.clear();
         _messageCtrl.clear();
-        setState(() {});  // rebuild recent list
+        AdminHelpers.invalidateCache(_recentBroadcastCacheKey);
+        setState(() {
+          _recentFuture = _loadRecentNotifications(forceRefresh: true);
+        });
       }
     } catch (e) {
       if (mounted) {
-        AdminHelpers.showSnack(context, 'Error: $e', error: true);
+        AdminHelpers.showError(context, e,
+            fallback: 'Unable to send broadcast.');
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -195,12 +223,7 @@ class _AdminBroadcastTabState extends State<AdminBroadcastTab> {
 
   Widget _buildRecentNotifications() {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _supabase
-          .from('notifications')
-      // IMPROVED: Select only needed columns instead of * (reduces egress)
-          .select('id, title, message, created_at')
-          .order('created_at', ascending: false)
-          .limit(10),
+      future: _recentFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(

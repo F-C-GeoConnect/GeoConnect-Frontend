@@ -1,9 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AdminHelpers {
   static final NumberFormat currency =
   NumberFormat.currency(symbol: 'Rs. ', decimalDigits: 0);
+
+  static final Map<String, _AdminCacheEntry<dynamic>> _cache = {};
+
+  static Future<T> cachedLoad<T>(
+    String key,
+    Future<T> Function() loader, {
+    Duration ttl = const Duration(seconds: 45),
+    bool forceRefresh = false,
+  }) async {
+    final now = DateTime.now();
+    if (!forceRefresh) {
+      final cached = _cache[key];
+      if (cached != null && now.isBefore(cached.expiresAt)) {
+        return cached.value as T;
+      }
+    }
+
+    final value = await loader();
+    _cache[key] = _AdminCacheEntry<dynamic>(value, now.add(ttl));
+    return value;
+  }
+
+  static void invalidateCache(String key) {
+    _cache.remove(key);
+  }
+
+  static void invalidateCachePrefix(String prefix) {
+    final keys = _cache.keys.where((k) => k.startsWith(prefix)).toList();
+    for (final key in keys) {
+      _cache.remove(key);
+    }
+  }
 
   static Color statusColor(String status) {
     switch (status.toLowerCase()) {
@@ -58,6 +91,29 @@ class AdminHelpers {
     return result == true;
   }
 
+  static String friendlyError(Object error, {String fallback = 'Something went wrong. Please try again.'}) {
+    if (error is PostgrestException) {
+      // Avoid leaking raw DB errors to end users.
+      return 'Request could not be completed. Please check permissions and try again.';
+    }
+    if (error is StorageException) {
+      return 'File operation failed. Please retry in a moment.';
+    }
+    if (error is AuthException) {
+      return 'Session expired. Please sign in again.';
+    }
+    return fallback;
+  }
+
+  static void showError(
+    BuildContext context,
+    Object error, {
+    String fallback = 'Something went wrong. Please try again.',
+  }) {
+    debugPrint('Admin action error: $error');
+    showSnack(context, friendlyError(error, fallback: fallback), error: true);
+  }
+
   static void showSnack(BuildContext context, String msg,
       {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -67,4 +123,10 @@ class AdminHelpers {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
   }
+}
+
+class _AdminCacheEntry<T> {
+  final T value;
+  final DateTime expiresAt;
+  _AdminCacheEntry(this.value, this.expiresAt);
 }

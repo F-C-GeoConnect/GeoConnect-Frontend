@@ -15,6 +15,7 @@ class AdminUsersTab extends StatefulWidget {
 
 class _AdminUsersTabState extends State<AdminUsersTab> {
   final _supabase = Supabase.instance.client;
+  static const _usersCacheKey = 'admin.users.list';
   List<Map<String, dynamic>> _users    = [];
   List<Map<String, dynamic>> _filtered = [];
   bool _loading = true;
@@ -26,11 +27,18 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
     _fetchUsers();
   }
 
-  Future<void> _fetchUsers() async {
+  Future<void> _fetchUsers({bool forceRefresh = false}) async {
     setState(() => _loading = true);
     try {
-      final data =
-      await _supabase.from('profiles').select().order('full_name');
+      final data = await AdminHelpers.cachedLoad<List<dynamic>>(
+        _usersCacheKey,
+        () => _supabase
+            .from('profiles')
+            .select('id, full_name, phone, address, avatar_url, is_admin, is_banned, is_verified')
+            .order('full_name'),
+        ttl: const Duration(seconds: 30),
+        forceRefresh: forceRefresh,
+      );
       if (mounted) {
         setState(() {
           _users = List<Map<String, dynamic>>.from(data);
@@ -58,6 +66,18 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
     }
   }
 
+  void _patchUserFlagLocally(String userId, String key, bool value) {
+    _users = _users.map((u) {
+      if (u['id'].toString() != userId) return u;
+      return {...u, key: value};
+    }).toList();
+    _applySearch();
+  }
+
+  List<Map<String, dynamic>> _cloneUsers(List<Map<String, dynamic>> source) {
+    return source.map((u) => Map<String, dynamic>.from(u)).toList();
+  }
+
   Future<void> _toggleBan(String userId, String name, bool isBanned) async {
     final currentId = _supabase.auth.currentUser?.id;
     if (userId == currentId) {
@@ -75,15 +95,39 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
       confirmColor: isBanned ? Colors.green : Colors.red,
     );
     if (!ok) return;
+
+    final previousUsers = _cloneUsers(_users);
+    if (mounted) {
+      setState(() => _patchUserFlagLocally(userId, 'is_banned', !isBanned));
+    }
+
     try {
-      await _supabase
+      final updatedRows = await _supabase
           .from('profiles')
-          .update({'is_banned': !isBanned}).eq('id', userId);
-      AdminHelpers.showSnack(
-          context, 'User ${isBanned ? "unbanned" : "banned"}.');
-      _fetchUsers();
+          .update({'is_banned': !isBanned})
+          .eq('id', userId)
+          .select('id');
+
+      if (updatedRows.isEmpty) {
+        throw Exception('Ban update did not persist (user not found or permission denied).');
+      }
+
+      if (mounted) {
+        AdminHelpers.showSnack(
+            context, 'User ${isBanned ? "unbanned" : "banned"}.');
+      }
+      AdminHelpers.invalidateCache(_usersCacheKey);
+      AdminHelpers.invalidateCache('admin.dashboard.summary');
+      await _fetchUsers(forceRefresh: true);
     } catch (e) {
-      AdminHelpers.showSnack(context, 'Error: $e', error: true);
+      if (mounted) {
+        setState(() {
+          _users = previousUsers;
+          _applySearch();
+        });
+        AdminHelpers.showError(context, e,
+            fallback: 'Unable to update ban status.');
+      }
     }
   }
 
@@ -99,15 +143,39 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
       confirmColor: isVerified ? Colors.orange : Colors.blue,
     );
     if (!ok) return;
+
+    final previousUsers = _cloneUsers(_users);
+    if (mounted) {
+      setState(() => _patchUserFlagLocally(userId, 'is_verified', !isVerified));
+    }
+
     try {
-      await _supabase
+      final updatedRows = await _supabase
           .from('profiles')
-          .update({'is_verified': !isVerified}).eq('id', userId);
-      AdminHelpers.showSnack(
-          context, 'User ${isVerified ? "unverified" : "verified"}.');
-      _fetchUsers();
+          .update({'is_verified': !isVerified})
+          .eq('id', userId)
+          .select('id');
+
+      if (updatedRows.isEmpty) {
+        throw Exception('Verify update did not persist (user not found or permission denied).');
+      }
+
+      if (mounted) {
+        AdminHelpers.showSnack(
+            context, 'User ${isVerified ? "unverified" : "verified"}.');
+      }
+      AdminHelpers.invalidateCache(_usersCacheKey);
+      AdminHelpers.invalidateCache('admin.dashboard.summary');
+      await _fetchUsers(forceRefresh: true);
     } catch (e) {
-      AdminHelpers.showSnack(context, 'Error: $e', error: true);
+      if (mounted) {
+        setState(() {
+          _users = previousUsers;
+          _applySearch();
+        });
+        AdminHelpers.showError(context, e,
+            fallback: 'Unable to update verification status.');
+      }
     }
   }
 
@@ -136,9 +204,12 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
       AdminHelpers.showSnack(
           context,
           isAdmin ? 'Admin role removed.' : 'Admin role granted.');
-      _fetchUsers();
+      AdminHelpers.invalidateCache(_usersCacheKey);
+      AdminHelpers.invalidateCache('admin.dashboard.summary');
+      _fetchUsers(forceRefresh: true);
     } catch (e) {
-      AdminHelpers.showSnack(context, 'Error: $e', error: true);
+      AdminHelpers.showError(context, e,
+          fallback: 'Unable to update admin role.');
     }
   }
 
@@ -173,7 +244,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
               ? const AdminEmptyState(
               message: 'No users found', icon: Icons.people)
               : RefreshIndicator(
-            onRefresh: _fetchUsers,
+            onRefresh: () => _fetchUsers(forceRefresh: true),
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(
                   horizontal: 12, vertical: 4),

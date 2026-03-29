@@ -15,6 +15,7 @@ class AdminProductsTab extends StatefulWidget {
 
 class _AdminProductsTabState extends State<AdminProductsTab> {
   final _supabase = Supabase.instance.client;
+  static const _productsCacheKey = 'admin.products.list';
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _filtered = [];
   bool _loading = true;
@@ -26,13 +27,18 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
     _fetchProducts();
   }
 
-  Future<void> _fetchProducts() async {
+  Future<void> _fetchProducts({bool forceRefresh = false}) async {
     setState(() => _loading = true);
     try {
-      final data = await _supabase
-          .from('products')
-          .select()
-          .order('created_at', ascending: false);
+      final data = await AdminHelpers.cachedLoad<List<dynamic>>(
+        _productsCacheKey,
+        () => _supabase
+            .from('products')
+            .select('id, imageUrl, productName, sellerName, category, price, total_quantity, description, created_at')
+            .order('created_at', ascending: false),
+        ttl: const Duration(seconds: 30),
+        forceRefresh: forceRefresh,
+      );
       if (mounted) {
         setState(() {
           _products = List<Map<String, dynamic>>.from(data);
@@ -72,9 +78,12 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
     try {
       await _supabase.from('products').delete().eq('id', id);
       AdminHelpers.showSnack(context, 'Product deleted.');
-      _fetchProducts();
+      AdminHelpers.invalidateCache(_productsCacheKey);
+      AdminHelpers.invalidateCache('admin.dashboard.summary');
+      _fetchProducts(forceRefresh: true);
     } catch (e) {
-      AdminHelpers.showSnack(context, 'Error: $e', error: true);
+      AdminHelpers.showError(context, e,
+          fallback: 'Unable to delete product.');
     }
   }
 
@@ -134,9 +143,12 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
         'total_quantity':  double.tryParse(qtyCtrl.text) ?? product['total_quantity'],
       }).eq('id', product['id']);
       AdminHelpers.showSnack(context, 'Product updated.');
-      _fetchProducts();
+      AdminHelpers.invalidateCache(_productsCacheKey);
+      AdminHelpers.invalidateCache('admin.dashboard.summary');
+      _fetchProducts(forceRefresh: true);
     } catch (e) {
-      AdminHelpers.showSnack(context, 'Error: $e', error: true);
+      AdminHelpers.showError(context, e,
+          fallback: 'Unable to update product details.');
     }
   }
 
@@ -193,7 +205,7 @@ class _AdminProductsTabState extends State<AdminProductsTab> {
               message: 'No products found',
               icon: Icons.inventory_2)
               : RefreshIndicator(
-            onRefresh: _fetchProducts,
+            onRefresh: () => _fetchProducts(forceRefresh: true),
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(
                   horizontal: 12, vertical: 4),
